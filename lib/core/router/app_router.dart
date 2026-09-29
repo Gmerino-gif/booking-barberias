@@ -9,6 +9,7 @@ import '../../features/business/shell/business_shell.dart';
 import '../../features/client/presentation/home_screen.dart';
 import '../../features/client/shell/client_shell.dart';
 import '../../features/splash/presentation/splash_screen.dart';
+import '../../features/client/presentation/reservations_screen.dart';
 
 class AppRouter {
   static final GoRouter router = GoRouter(
@@ -22,7 +23,7 @@ class AppRouter {
 
       if (auth.status == AuthStatus.unauthenticated) {
         if (isLogin || isSplash) return null;
-        return '/login';
+       //  return '/login'; ← COMENTADO TEMPORALMENTE
       }
 
       // Autenticado: sacarlo de splash/login
@@ -64,8 +65,8 @@ class AppRouter {
                 const Center(child: Text('Búsqueda de establecimientos')),
           ),
           GoRoute(
-            path: '/client/bookings',
-            builder: (_, _) => const Center(child: Text('Mis reservas')),
+            path: '/client/reservas',
+            builder: (_, _) => const ReservationsScreen(),
           ),
           GoRoute(
             path: '/client/profile',
