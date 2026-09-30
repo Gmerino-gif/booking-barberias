@@ -37,3 +37,4 @@ export const createProfessional = async (req: AuthenticatedRequest, res: Respons
     res.status(500).json({ message: 'Error al registrar profesional' });
   }
 };
+
