@@ -1,3 +1,4 @@
+import 'package:go_router/go_router.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -110,7 +111,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 12),
                   TextButton(
-                    onPressed: () {},
+                    onPressed: () => context.go('/register'),
                     child: const Text('¿No tienes cuenta? Regístrate'),
                   ),
                 ],

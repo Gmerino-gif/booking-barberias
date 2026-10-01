@@ -31,19 +31,34 @@ class Professional {
 // ============================================================
 
 class ReservationsScreen extends StatefulWidget {
-  const ReservationsScreen({super.key});
+  final String establishmentId;
+  final String establishmentName;
+  final String serviceId;
+  final String serviceName;
+  final int servicePrice;
+  final int serviceDurationMin;
+
+  const ReservationsScreen({
+    super.key,
+    required this.establishmentId,
+    required this.establishmentName,
+    required this.serviceId,
+    required this.serviceName,
+    required this.servicePrice,
+    required this.serviceDurationMin,
+  });
 
   @override
   State<ReservationsScreen> createState() => _ReservationsScreenState();
 }
 
 class _ReservationsScreenState extends State<ReservationsScreen> {
-  // --- Datos de prueba (hardcodeados) ---
-  final BarberService _service = const BarberService(
-    name: 'Corte + Barba',
-    price: 25000,
-    durationMin: 45,
-  );
+  // --- Datos que vienen del detalle de la barbería ---
+  BarberService get _service => BarberService(
+        name: widget.serviceName,
+        price: widget.servicePrice,
+        durationMin: widget.serviceDurationMin,
+      );
 
   final List<Professional> _professionals = const [
     Professional(name: 'Cualquiera', specialty: 'Primer disponible'),
@@ -318,9 +333,9 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Barbería 1',
-                  style: TextStyle(
+                Text(
+                  widget.establishmentName,
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 16,
                     fontWeight: FontWeight.bold,

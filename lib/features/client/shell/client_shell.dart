@@ -12,7 +12,7 @@ class ClientShell extends StatelessWidget {
   static const _tabs = [
     ('/client', Icons.home_outlined, 'Inicio'),
     ('/client/search', Icons.search, 'Buscar'),
-    ('/client/reservas', Icons.event_note_outlined, 'Reservas'),
+    ('/client/my-bookings', Icons.event_note_outlined, 'Mis reservas'),
     ('/client/profile', Icons.person_outline, 'Perfil'),
   ];
 

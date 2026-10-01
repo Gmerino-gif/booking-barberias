@@ -10,12 +10,12 @@ class ClientShell extends StatelessWidget {
   const ClientShell({super.key, required this.child});
 
   static const _tabs = [
-    ('/client', Icons.home_outlined, 'Inicio'),
-    ('/client/search', Icons.search, 'Buscar'),
-    ('/client/bookings', Icons.event_note_outlined, 'Reservas'),
-    ('/client/profile', Icons.person_outline, 'Perfil'),
+  ('/client', Icons.home_outlined, 'Inicio'),
+  ('/client/search', Icons.search, 'Buscar'),
+  ('/client/my-bookings', Icons.event_note_outlined, 'Mis reservas'),
+  ('/client/profile', Icons.person_outline, 'Perfil'),
   ];
-
+  
   int _indexFromLocation(String location) {
     final i = _tabs.indexWhere((t) => location.startsWith(t.$1));
     return i < 0 ? 0 : i;

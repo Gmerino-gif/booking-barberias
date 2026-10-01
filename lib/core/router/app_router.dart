@@ -2,14 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../features/auth/presentation/register_screen.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/providers/auth_provider.dart';
 import '../../features/business/presentation/dashboard_screen.dart';
 import '../../features/business/shell/business_shell.dart';
 import '../../features/client/presentation/home_screen.dart';
+import '../../features/client/presentation/my_bookings_screen.dart';
 import '../../features/client/shell/client_shell.dart';
 import '../../features/splash/presentation/splash_screen.dart';
 import '../../features/client/presentation/reservations_screen.dart';
+import '../../features/client/presentation/establishment_detail_screen.dart';
+import '../../features/client/presentation/profile_screen.dart';
 
 class AppRouter {
   static final GoRouter router = GoRouter(
@@ -23,7 +27,7 @@ class AppRouter {
 
       if (auth.status == AuthStatus.unauthenticated) {
         if (isLogin || isSplash) return null;
-       //  return '/login'; ← COMENTADO TEMPORALMENTE
+        // return '/login'; ← COMENTADO TEMPORALMENTE
       }
 
       // Autenticado: sacarlo de splash/login
@@ -50,6 +54,10 @@ class AppRouter {
         path: '/login',
         builder: (_, _) => const LoginScreen(),
       ),
+      GoRoute(
+        path: '/register',
+        builder: (_, _) => const RegisterScreen(),
+      ),
 
       // ---------- CLIENT ----------
       ShellRoute(
@@ -60,17 +68,39 @@ class AppRouter {
             builder: (_, _) => const ClientHomeScreen(),
           ),
           GoRoute(
+            path: '/client/establishment/:id',
+            builder: (_, state) => EstablishmentDetailScreen(
+              establishmentId: state.pathParameters['id']!,
+            ),
+          ),
+          GoRoute(
             path: '/client/search',
-            builder: (_, _) =>
-                const Center(child: Text('Búsqueda de establecimientos')),
+            builder: (_, _) => const Center(
+              child: Text('Búsqueda de establecimientos'),
+            ),
           ),
           GoRoute(
             path: '/client/reservas',
-            builder: (_, _) => const ReservationsScreen(),
+            builder: (_, state) {
+              final q = state.uri.queryParameters;
+              return ReservationsScreen(
+                establishmentId: q['establishmentId'] ?? '1',
+                establishmentName: q['establishmentName'] ?? 'Barbería 1',
+                serviceId: q['serviceId'] ?? 's1',
+                serviceName: q['serviceName'] ?? 'Corte Clásico',
+                servicePrice: int.tryParse(q['price'] ?? '') ?? 25000,
+                serviceDurationMin:
+                    int.tryParse(q['durationMin'] ?? '') ?? 30,
+              );
+            },
+          ),
+          GoRoute(
+            path: '/client/my-bookings',
+            builder: (_, _) => const MyBookingsScreen(),
           ),
           GoRoute(
             path: '/client/profile',
-            builder: (_, _) => const Center(child: Text('Mi perfil')),
+            builder: (_, _) => const ProfileScreen(),
           ),
         ],
       ),
@@ -89,11 +119,14 @@ class AppRouter {
           ),
           GoRoute(
             path: '/business/services',
-            builder: (_, _) => const Center(child: Text('CRUD de servicios')),
+            builder: (_, _) =>
+                const Center(child: Text('CRUD de servicios')),
           ),
           GoRoute(
             path: '/business/profile',
-            builder: (_, _) => const Center(child: Text('Perfil del negocio')),
+            builder: (_, _) => const Center(
+              child: Text('Perfil del negocio'),
+            ),
           ),
         ],
       ),
