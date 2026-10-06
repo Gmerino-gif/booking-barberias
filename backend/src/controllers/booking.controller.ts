@@ -64,7 +64,8 @@ export const createBooking = async (req: AuthenticatedRequest, res: Response): P
 export const getMyBookings = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const bookings = await Booking.find({ clientId: req.user!.id })
-      .populate('establishmentId', 'name address')
+      .populate('establishmentId', 'name address phone')
+      .populate('clientId', 'name phone')
       .populate('professionalId', 'name')
       .populate('serviceId', 'name durationMin price')
       .sort({ startAt: -1 });

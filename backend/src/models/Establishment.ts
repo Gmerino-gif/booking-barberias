@@ -8,7 +8,7 @@ const establishmentSchema = new Schema(
     photos: [{ type: String }],
     address: { type: String, required: true, trim: true, maxlength: 200 },
     city: { type: String, required: true, trim: true, maxlength: 100 },
-    phone: { type: String, trim: true },
+    phone: { type: String, required: true, trim: true, maxlength: 20 },
     rating: { type: Number, default: 0, min: 0, max: 5 },
     plan: { type: String, enum: ['free', 'pro', 'business'], default: 'free' },
     location: {

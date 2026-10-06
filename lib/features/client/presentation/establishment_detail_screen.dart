@@ -81,8 +81,15 @@ class ReviewItem {
 
 class EstablishmentDetailScreen extends StatefulWidget {
   final String establishmentId;
+  final String? establishmentName;
+  final String? establishmentPhone;
 
-  const EstablishmentDetailScreen({super.key, required this.establishmentId});
+  const EstablishmentDetailScreen({
+    super.key,
+    required this.establishmentId,
+    this.establishmentName,
+    this.establishmentPhone,
+  });
 
   @override
   State<EstablishmentDetailScreen> createState() =>
@@ -94,9 +101,9 @@ class _EstablishmentDetailScreenState
   bool _isFavorite = false;
 
   // --- Datos hardcodeados (después vienen del backend) ---
-  final EstablishmentDetail _establishment = const EstablishmentDetail(
-    id: '1',
-    name: 'Barbería El Rey',
+  EstablishmentDetail get _establishment => EstablishmentDetail(
+    id: widget.establishmentId,
+    name: widget.establishmentName ?? 'Barbería',
     description:
         'Somos una barbería con más de 10 años de experiencia en el mercado. '
         'Ofrecemos cortes clásicos, modernos y tratamientos de barba con los '
@@ -104,7 +111,7 @@ class _EstablishmentDetailScreenState
     photos: [],
     address: 'Calle 80 #45-12, Local 3',
     city: 'Barranquilla, Atlántico',
-    phone: '+57 300 123 4567',
+    phone: widget.establishmentPhone ?? '',
     rating: 4.8,
     reviewCount: 124,
   );
@@ -294,7 +301,15 @@ class _EstablishmentDetailScreenState
                   // --- Botón Reservar general ---
                   FilledButton.icon(
                     onPressed: () {
-                      context.go('/client/reservas');
+                      context.go(
+                        '/client/reservas'
+                        '?establishmentId=${_establishment.id}'
+                        '&establishmentName=${Uri.encodeComponent(_establishment.name)}'
+                        '&serviceId=${_services.first.id}'
+                        '&serviceName=${Uri.encodeComponent(_services.first.name)}'
+                        '&price=${_services.first.price}'
+                        '&durationMin=${_services.first.durationMin}',
+                      );
                     },
                     icon: const Icon(Icons.calendar_month),
                     label: const Text(
@@ -715,8 +730,14 @@ class _EstablishmentDetailScreenState
         children: [
           _buildContactRow(theme, Icons.location_on_outlined,
               '${_establishment.address}, ${_establishment.city}'),
-          const Divider(height: 20),
-          _buildContactRow(theme, Icons.phone_outlined, _establishment.phone),
+          if (_establishment.phone.isNotEmpty) ...[
+            const Divider(height: 20),
+            _buildContactRow(
+              theme,
+              Icons.phone_outlined,
+              _establishment.phone,
+            ),
+          ],
         ],
       ),
     );

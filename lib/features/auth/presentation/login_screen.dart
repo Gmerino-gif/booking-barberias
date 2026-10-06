@@ -2,7 +2,6 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../../core/modelos/user_role.dart';
 import '../providers/auth_provider.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -13,9 +12,10 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _emailCtrl = TextEditingController(text: 'demo@test.com');
-  final _passCtrl = TextEditingController(text: '123456');
-  UserRole _selectedRole = UserRole.client;
+  final _emailCtrl = TextEditingController();
+  final _passCtrl = TextEditingController();
+  bool _isLoading = false;
+  bool _obscurePassword = true;
 
   @override
   void dispose() {
@@ -26,22 +26,23 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _submit() async {
     final auth = context.read<AuthProvider>();
-    await auth.login(
-      email: _emailCtrl.text.trim(),
-      password: _passCtrl.text,
-      role: _selectedRole,
-    );
+    setState(() => _isLoading = true);
 
-    if (!mounted) return;
-    if (_selectedRole.isBusiness) {
-      // El redirect del router lo hará automáticamente.
+    try {
+      await auth.login(email: _emailCtrl.text.trim(), password: _passCtrl.text);
+      if (!mounted) return;
+      context.go(auth.isBusiness ? '/business' : '/client');
+    } on AuthException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message)));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final loading = context.watch<AuthProvider>().status == AuthStatus.authenticated;
-
     return Scaffold(
       body: SafeArea(
         child: Center(
@@ -66,27 +67,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 32),
 
-                  // Selector de rol (Cliente / Negocio)
-                  SegmentedButton<UserRole>(
-                    segments: const [
-                      ButtonSegment(
-                        value: UserRole.client,
-                        label: Text('Cliente'),
-                        icon: Icon(Icons.person),
-                      ),
-                      ButtonSegment(
-                        value: UserRole.owner,
-                        label: Text('Negocio'),
-                        icon: Icon(Icons.store),
-                      ),
-                    ],
-                    selected: {_selectedRole},
-                    onSelectionChanged: (s) {
-                      setState(() => _selectedRole = s.first);
-                    },
-                  ),
-                  const SizedBox(height: 24),
-
                   TextField(
                     controller: _emailCtrl,
                     keyboardType: TextInputType.emailAddress,
@@ -98,16 +78,47 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 16),
                   TextField(
                     controller: _passCtrl,
-                    obscureText: true,
-                    decoration: const InputDecoration(
+                    obscureText: _obscurePassword,
+                    decoration: InputDecoration(
                       labelText: 'Contraseña',
                       prefixIcon: Icon(Icons.lock_outline),
+                      suffixIcon: IconButton(
+                        tooltip: _obscurePassword
+                            ? 'Mostrar contraseña'
+                            : 'Ocultar contraseña',
+                        onPressed: () => setState(
+                          () => _obscurePassword = !_obscurePassword,
+                        ),
+                        icon: Icon(
+                          _obscurePassword
+                              ? Icons.visibility_outlined
+                              : Icons.visibility_off_outlined,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: _isLoading
+                          ? null
+                          : () => context.go('/forgot-password'),
+                      child: const Text('¿Olvidaste tu contraseña?'),
                     ),
                   ),
                   const SizedBox(height: 24),
                   FilledButton(
-                    onPressed: loading ? null : _submit,
-                    child: const Text('Iniciar sesión'),
+                    onPressed: _isLoading ? null : _submit,
+                    child: _isLoading
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text('Iniciar sesión'),
                   ),
                   const SizedBox(height: 12),
                   TextButton(

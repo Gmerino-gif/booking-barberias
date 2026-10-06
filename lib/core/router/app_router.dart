@@ -4,8 +4,10 @@ import 'package:provider/provider.dart';
 
 import '../../features/auth/presentation/register_screen.dart';
 import '../../features/auth/presentation/login_screen.dart';
+import '../../features/auth/presentation/password_recovery_screen.dart';
 import '../../features/auth/providers/auth_provider.dart';
 import '../../features/business/presentation/dashboard_screen.dart';
+import '../../features/business/presentation/business_profile_screen.dart';
 import '../../features/business/shell/business_shell.dart';
 import '../../features/client/presentation/home_screen.dart';
 import '../../features/client/presentation/my_bookings_screen.dart';
@@ -46,38 +48,38 @@ class AppRouter {
       return null;
     },
     routes: [
+      GoRoute(path: '/splash', builder: (_, _) => const SplashScreen()),
+      GoRoute(path: '/login', builder: (_, _) => const LoginScreen()),
+      GoRoute(path: '/register', builder: (_, _) => const RegisterScreen()),
       GoRoute(
-        path: '/splash',
-        builder: (_, _) => const SplashScreen(),
+        path: '/forgot-password',
+        builder: (_, _) => const ForgotPasswordScreen(),
       ),
       GoRoute(
-        path: '/login',
-        builder: (_, _) => const LoginScreen(),
-      ),
-      GoRoute(
-        path: '/register',
-        builder: (_, _) => const RegisterScreen(),
+        path: '/reset-password',
+        builder: (_, state) => ResetPasswordScreen(
+          email: state.uri.queryParameters['email'],
+          token: state.uri.queryParameters['token'],
+        ),
       ),
 
       // ---------- CLIENT ----------
       ShellRoute(
         builder: (context, state, child) => ClientShell(child: child),
         routes: [
-          GoRoute(
-            path: '/client',
-            builder: (_, _) => const ClientHomeScreen(),
-          ),
+          GoRoute(path: '/client', builder: (_, _) => const ClientHomeScreen()),
           GoRoute(
             path: '/client/establishment/:id',
             builder: (_, state) => EstablishmentDetailScreen(
               establishmentId: state.pathParameters['id']!,
+              establishmentName: state.uri.queryParameters['name'],
+              establishmentPhone: state.uri.queryParameters['phone'],
             ),
           ),
           GoRoute(
             path: '/client/search',
-            builder: (_, _) => const Center(
-              child: Text('Búsqueda de establecimientos'),
-            ),
+            builder: (_, _) =>
+                const Center(child: Text('Búsqueda de establecimientos')),
           ),
           GoRoute(
             path: '/client/reservas',
@@ -89,8 +91,7 @@ class AppRouter {
                 serviceId: q['serviceId'] ?? 's1',
                 serviceName: q['serviceName'] ?? 'Corte Clásico',
                 servicePrice: int.tryParse(q['price'] ?? '') ?? 25000,
-                serviceDurationMin:
-                    int.tryParse(q['durationMin'] ?? '') ?? 30,
+                serviceDurationMin: int.tryParse(q['durationMin'] ?? '') ?? 30,
               );
             },
           ),
@@ -119,14 +120,11 @@ class AppRouter {
           ),
           GoRoute(
             path: '/business/services',
-            builder: (_, _) =>
-                const Center(child: Text('CRUD de servicios')),
+            builder: (_, _) => const Center(child: Text('CRUD de servicios')),
           ),
           GoRoute(
             path: '/business/profile',
-            builder: (_, _) => const Center(
-              child: Text('Perfil del negocio'),
-            ),
+            builder: (_, _) => const BusinessProfileScreen(),
           ),
         ],
       ),

@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
+
+import '../../auth/providers/auth_provider.dart';
 
 // ============================================================
 // MODELO DE USUARIO (hardcodeado por ahora)
@@ -37,9 +40,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   );
 
   // --- Contadores (hardcodeados, después vienen del backend) ---
-  int _bookingsCount = 5;
-  int _favoritesCount = 3;
-  int _reviewsCount = 2;
+  final int _bookingsCount = 5;
+  final int _favoritesCount = 3;
+  final int _reviewsCount = 2;
 
   // ============================================================
   // Acciones
@@ -48,9 +51,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Cerrar sesión'),
         content: const Text('¿Estás seguro que quieres cerrar sesión?'),
         actions: [
@@ -63,9 +64,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               Navigator.pop(context);
               context.go('/login');
             },
-            style: FilledButton.styleFrom(
-              backgroundColor: Colors.red,
-            ),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
             child: const Text('Cerrar sesión'),
           ),
         ],
@@ -79,13 +78,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final auth = context.watch<AuthProvider>();
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
           // ---------- Header con avatar ----------
-          _buildHeader(theme),
+          _buildHeader(
+            theme,
+            name: auth.userName ?? _user.name,
+            email: auth.userEmail ?? _user.email,
+            phone: auth.userPhone,
+          ),
           const SizedBox(height: 24),
 
           // ---------- Stats ----------
@@ -108,14 +113,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
   // WIDGETS AUXILIARES
   // ============================================================
 
-  Widget _buildHeader(ThemeData theme) {
+  Widget _buildHeader(
+    ThemeData theme, {
+    required String name,
+    required String email,
+    String? phone,
+  }) {
     return Column(
       children: [
         CircleAvatar(
           radius: 50,
           backgroundColor: theme.colorScheme.primary,
           child: Text(
-            _user.name.isNotEmpty ? _user.name.substring(0, 1).toUpperCase() : '?',
+            name.isNotEmpty ? name.substring(0, 1).toUpperCase() : '?',
             style: const TextStyle(
               fontSize: 40,
               fontWeight: FontWeight.bold,
@@ -125,20 +135,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
         const SizedBox(height: 16),
         Text(
-          _user.name,
-          style: const TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.bold,
-          ),
+          name,
+          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 4),
         Text(
-          _user.email,
+          email,
           style: TextStyle(
             fontSize: 14,
             color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
+        if (phone != null && phone.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Text(
+            phone,
+            style: TextStyle(
+              fontSize: 14,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
         const SizedBox(height: 8),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -194,7 +211,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
             color: theme.colorScheme.outlineVariant,
           ),
           Expanded(
-            child: _buildStatItem(theme, _favoritesCount.toString(), 'Favoritos'),
+            child: _buildStatItem(
+              theme,
+              _favoritesCount.toString(),
+              'Favoritos',
+            ),
           ),
           Container(
             height: 40,
@@ -332,10 +353,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
       title: Text(
         title,
-        style: const TextStyle(
-          fontWeight: FontWeight.w600,
-          fontSize: 14,
-        ),
+        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
       ),
       subtitle: Text(
         subtitle,

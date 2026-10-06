@@ -12,6 +12,8 @@ class NearbyBarber {
   final double lat;
   final double lng;
   final double rating;
+  final String address;
+  final String phone;
 
   const NearbyBarber({
     required this.id,
@@ -19,6 +21,8 @@ class NearbyBarber {
     required this.lat,
     required this.lng,
     required this.rating,
+    this.address = '',
+    this.phone = '',
   });
 }
 
@@ -32,6 +36,7 @@ class NearbyMap extends StatefulWidget {
   final double? userLng;
   final double height;
   final void Function(NearbyBarber)? onBarberTap;
+  final ValueChanged<LatLng>? onCenterChanged;
 
   const NearbyMap({
     super.key,
@@ -40,6 +45,7 @@ class NearbyMap extends StatefulWidget {
     this.userLng,
     this.height = 220,
     this.onBarberTap,
+    this.onCenterChanged,
   });
 
   @override
@@ -55,7 +61,7 @@ class _NearbyMapState extends State<NearbyMap> {
     super.dispose();
   }
 
-  static const _barranquillaCenter = LatLng(10.9878, -74.7889);
+  static const _barranquillaCenter = LatLng(10.920684, -74.8097153);
 
   LatLng get _center {
     if (widget.userLat != null && widget.userLng != null) {
@@ -90,6 +96,9 @@ class _NearbyMapState extends State<NearbyMap> {
               interactionOptions: const InteractionOptions(
                 flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
               ),
+              onPositionChanged: (camera, hasGesture) {
+                if (hasGesture) widget.onCenterChanged?.call(camera.center);
+              },
             ),
             children: [
               TileLayer(

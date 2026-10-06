@@ -6,12 +6,24 @@
 // tree, read text, and verify that the values of widget properties are correct.
 
 import 'package:booking_app/app.dart';
+import 'package:booking_app/features/auth/providers/auth_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
 
 void main() {
-  testWidgets('booking app loads without crashing', (WidgetTester tester) async {
-    await tester.pumpWidget(const BookingApp());
+  testWidgets('booking app loads without crashing', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      ChangeNotifierProvider(
+        create: (_) => AuthProvider(),
+        child: const BookingApp(),
+      ),
+    );
+
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
 
     expect(find.byType(MaterialApp), findsOneWidget);
   });

@@ -6,6 +6,7 @@ export interface AuthTokenPayload extends JwtPayload {
   sub: string;
   role: UserRole;
   tokenType: 'access' | 'refresh';
+  tokenVersion?: number;
 }
 
 export const assertJwtSecret = (): void => {
@@ -19,14 +20,22 @@ const getJwtSecret = (): string => {
   return process.env.JWT_SECRET as string;
 };
 
-export const createAccessToken = (userId: string, role: UserRole): string =>
-  jwt.sign({ role, tokenType: 'access' }, getJwtSecret(), {
+export const createAccessToken = (
+  userId: string,
+  role: UserRole,
+  tokenVersion = 0,
+): string =>
+  jwt.sign({ role, tokenType: 'access', tokenVersion }, getJwtSecret(), {
     subject: userId,
     expiresIn: '15m',
   });
 
-export const createRefreshToken = (userId: string, role: UserRole): string =>
-  jwt.sign({ role, tokenType: 'refresh' }, getJwtSecret(), {
+export const createRefreshToken = (
+  userId: string,
+  role: UserRole,
+  tokenVersion = 0,
+): string =>
+  jwt.sign({ role, tokenType: 'refresh', tokenVersion }, getJwtSecret(), {
     subject: userId,
     expiresIn: '7d',
   });
@@ -43,6 +52,10 @@ export const verifyAuthToken = (
     typeof payload.sub !== 'string' ||
     typeof payload.role !== 'string' ||
     !validRoles.includes(payload.role) ||
+    (payload.tokenVersion !== undefined &&
+      (typeof payload.tokenVersion !== 'number' ||
+        !Number.isInteger(payload.tokenVersion) ||
+        payload.tokenVersion < 0)) ||
     payload.tokenType !== expectedType
   ) {
     throw new Error('Token inválido');
