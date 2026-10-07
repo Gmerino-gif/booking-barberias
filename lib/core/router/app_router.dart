@@ -1,5 +1,4 @@
 import 'package:go_router/go_router.dart';
-import 'package:provider/provider.dart';
 
 import '../../features/auth/presentation/register_screen.dart';
 import '../../features/auth/presentation/login_screen.dart';
@@ -7,6 +6,7 @@ import '../../features/auth/presentation/password_recovery_screen.dart';
 import '../../features/auth/providers/auth_provider.dart';
 import '../../features/business/presentation/dashboard_screen.dart';
 import '../../features/business/presentation/business_profile_screen.dart';
+import '../../features/business/presentation/business_professionals_screen.dart';
 import '../../features/business/shell/business_shell.dart';
 import '../../features/client/presentation/home_screen.dart';
 import '../../features/client/presentation/my_bookings_screen.dart';
@@ -19,15 +19,21 @@ import '../../features/client/presentation/search_screen.dart';
 import '../../features/client/presentation/favorites_screen.dart';
 
 class AppRouter {
-  static final GoRouter router = GoRouter(
+  static GoRouter create(AuthProvider authProvider) => GoRouter(
+    refreshListenable: authProvider,
     initialLocation: '/splash',
     redirect: (context, state) {
-      final auth = context.read<AuthProvider>();
+      final auth = authProvider;
       final path = state.uri.path;
 
       final isSplash = path == '/splash';
       final isLogin = path == '/login';
-      final isPublicAuthRoute = isSplash || isLogin || path == '/register' || path == '/forgot-password' || path == '/reset-password';
+      final isPublicAuthRoute =
+          isSplash ||
+          isLogin ||
+          path == '/register' ||
+          path == '/forgot-password' ||
+          path == '/reset-password';
 
       if (auth.status == AuthStatus.unauthenticated) {
         if (isPublicAuthRoute) return null;
@@ -78,8 +84,14 @@ class AppRouter {
               establishmentPhone: state.uri.queryParameters['phone'],
             ),
           ),
-          GoRoute(path: '/client/search', builder: (_, _) => const SearchScreen()),
-          GoRoute(path: '/client/favorites', builder: (_, _) => const FavoritesScreen()),
+          GoRoute(
+            path: '/client/search',
+            builder: (_, _) => const SearchScreen(),
+          ),
+          GoRoute(
+            path: '/client/favorites',
+            builder: (_, _) => const FavoritesScreen(),
+          ),
           GoRoute(
             path: '/client/reservas',
             builder: (_, state) {
@@ -120,6 +132,10 @@ class AppRouter {
           GoRoute(
             path: '/business/services',
             builder: (_, _) => const BusinessServicesScreen(),
+          ),
+          GoRoute(
+            path: '/business/professionals',
+            builder: (_, _) => const BusinessProfessionalsScreen(),
           ),
           GoRoute(
             path: '/business/profile',

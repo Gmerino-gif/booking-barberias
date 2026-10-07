@@ -4,10 +4,13 @@ import 'package:provider/provider.dart';
 import 'app.dart';
 import 'features/auth/providers/auth_provider.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final authProvider = AuthProvider();
+  await authProvider.restoreSession();
   runApp(
-    ChangeNotifierProvider(
-      create: (_) => AuthProvider(),
+    ChangeNotifierProvider<AuthProvider>(
+      create: (_) => authProvider,
       child: const BookingApp(),
     ),
   );

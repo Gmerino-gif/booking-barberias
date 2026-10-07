@@ -10,6 +10,8 @@ const establishmentSchema = new Schema(
     city: { type: String, required: true, trim: true, maxlength: 100 },
     phone: { type: String, required: true, trim: true, maxlength: 20 },
     rating: { type: Number, default: 0, min: 0, max: 5 },
+    openingMinutes: { type: Number, default: 540, min: 0, max: 1439 },
+    closingMinutes: { type: Number, default: 1080, min: 1, max: 1440 },
     plan: { type: String, enum: ['free', 'pro', 'business'], default: 'free' },
     location: {
       type: { type: String, enum: ['Point'], default: 'Point' },

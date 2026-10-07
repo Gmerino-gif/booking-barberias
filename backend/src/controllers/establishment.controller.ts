@@ -18,6 +18,8 @@ const serializeEstablishment = (establishment: Record<string, any>) => {
     description: establishment.description ?? '',
     phone: establishment.phone,
     rating: establishment.rating ?? 0,
+    openingMinutes: establishment.openingMinutes ?? 540,
+    closingMinutes: establishment.closingMinutes ?? 1080,
     plan: establishment.plan ?? 'free',
     lat: Number.isFinite(lat) ? lat : null,
     lng: Number.isFinite(lng) ? lng : null,
@@ -185,8 +187,12 @@ export const updateMyEstablishment = async (req: AuthenticatedRequest, res: Resp
   const currentCoords = establishment.location?.coordinates ?? [0, 0];
   const lat = Number.isFinite(Number(body?.lat)) ? Number(body?.lat) : Number(currentCoords[1]);
   const lng = Number.isFinite(Number(body?.lng)) ? Number(body?.lng) : Number(currentCoords[0]);
+  const openingMinutes = body?.openingMinutes === undefined ? establishment.openingMinutes ?? 540 : Number(body.openingMinutes);
+  const closingMinutes = body?.closingMinutes === undefined ? establishment.closingMinutes ?? 1080 : Number(body.closingMinutes);
 
-  if (!validateEstablishmentInput(name, address, city, description, phone, lat, lng)) {
+  if (!validateEstablishmentInput(name, address, city, description, phone, lat, lng) ||
+      !Number.isInteger(openingMinutes) || !Number.isInteger(closingMinutes) ||
+      openingMinutes < 0 || closingMinutes > 1440 || closingMinutes - openingMinutes < 30) {
     res.status(400).json({ message: 'Datos de establecimiento incompletos o inválidos' });
     return;
   }
@@ -202,6 +208,8 @@ export const updateMyEstablishment = async (req: AuthenticatedRequest, res: Resp
           description,
           phone,
           location: { type: 'Point', coordinates: [lng, lat] },
+          openingMinutes,
+          closingMinutes,
         },
       },
       { new: true, runValidators: true },

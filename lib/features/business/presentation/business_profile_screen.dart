@@ -38,6 +38,8 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
   bool _mapReady = false;
   bool _locationConfirmed = true;
   bool _locationSearchHasError = false;
+  int _openingMinutes = 9 * 60;
+  int _closingMinutes = 18 * 60;
   String? _locationSearchMessage;
   LatLng? _selectedLocation;
   int _searchRequestSequence = 0;
@@ -145,6 +147,10 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
       _addressCtrl.text = (establishment['address'] ?? '').toString();
       _cityCtrl.text = (establishment['city'] ?? '').toString();
       _descriptionCtrl.text = (establishment['description'] ?? '').toString();
+      _openingMinutes =
+          (establishment['openingMinutes'] as num?)?.toInt() ?? 9 * 60;
+      _closingMinutes =
+          (establishment['closingMinutes'] as num?)?.toInt() ?? 18 * 60;
       _selectedLocation = initialPoint ?? _defaultMapCenter;
       _locationConfirmed = initialPoint != null;
       _locationFieldKey.currentState?.didChange(_selectedLocation);
@@ -213,6 +219,8 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
               'lng': _selectedLocation!.longitude,
               'description': _descriptionCtrl.text.trim(),
               'phone': _phoneCtrl.text.trim(),
+              'openingMinutes': _openingMinutes,
+              'closingMinutes': _closingMinutes,
             }),
           )
           .timeout(const Duration(seconds: 15));
@@ -262,6 +270,37 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
+  }
+
+  String _formatBusinessTime(int minutes) =>
+      '${(minutes ~/ 60).toString().padLeft(2, '0')}:${(minutes % 60).toString().padLeft(2, '0')}';
+
+  Future<void> _pickBusinessTime({required bool opening}) async {
+    final initial = TimeOfDay(
+      hour: (opening ? _openingMinutes : _closingMinutes) ~/ 60,
+      minute: (opening ? _openingMinutes : _closingMinutes) % 60,
+    );
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: initial,
+      helpText: opening ? 'Hora de apertura' : 'Hora de cierre',
+    );
+    if (picked == null || !mounted) return;
+    final minutes = picked.hour * 60 + picked.minute;
+    final nextOpening = opening ? minutes : _openingMinutes;
+    final nextClosing = opening ? _closingMinutes : minutes;
+    if (nextOpening >= nextClosing) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('La apertura debe ser anterior al cierre'),
+        ),
+      );
+      return;
+    }
+    setState(() {
+      _openingMinutes = nextOpening;
+      _closingMinutes = nextClosing;
+    });
   }
 
   Future<void> _useCurrentLocation() async {
@@ -516,6 +555,38 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
                         validator: (value) =>
                             _validateRequired(value, 'la descripción', 1000),
                       ),
+                      const SizedBox(height: 24),
+                      Text(
+                        'Horario de atención',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () => _pickBusinessTime(opening: true),
+                              icon: const Icon(Icons.login),
+                              label: Text(
+                                'Apertura ${_formatBusinessTime(_openingMinutes)}',
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () =>
+                                  _pickBusinessTime(opening: false),
+                              icon: const Icon(Icons.logout),
+                              label: Text(
+                                'Cierre ${_formatBusinessTime(_closingMinutes)}',
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                       const SizedBox(height: 20),
                       FormField<LatLng>(
                         key: _locationFieldKey,
@@ -747,4 +818,3 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
     );
   }
 }
-

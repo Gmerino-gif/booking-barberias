@@ -152,8 +152,11 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
 
       if (!mounted) return;
 
-      if (responses[0].statusCode != 200 || establishmentBody is! Map<String, dynamic>) {
-        throw Exception(_readMessage(establishmentBody) ?? 'No se pudo cargar la barbería');
+      if (responses[0].statusCode != 200 ||
+          establishmentBody is! Map<String, dynamic>) {
+        throw Exception(
+          _readMessage(establishmentBody) ?? 'No se pudo cargar la barbería',
+        );
       }
 
       final establishmentMap = establishmentBody['establishment'];
@@ -161,21 +164,48 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
         throw const FormatException('Respuesta de establecimiento inválida');
       }
 
-      final servicesList = (servicesBody is Map<String, dynamic> ? servicesBody['services'] : null) as List<dynamic>? ?? const [];
-      final professionalsList = (professionalsBody is Map<String, dynamic> ? professionalsBody['professionals'] : null) as List<dynamic>? ?? const [];
-      final reviewsList = (reviewsBody is Map<String, dynamic> ? reviewsBody['reviews'] : null) as List<dynamic>? ?? const [];
+      final servicesList =
+          (servicesBody is Map<String, dynamic>
+                  ? servicesBody['services']
+                  : null)
+              as List<dynamic>? ??
+          const [];
+      final professionalsList =
+          (professionalsBody is Map<String, dynamic>
+                  ? professionalsBody['professionals']
+                  : null)
+              as List<dynamic>? ??
+          const [];
+      final reviewsList =
+          (reviewsBody is Map<String, dynamic> ? reviewsBody['reviews'] : null)
+              as List<dynamic>? ??
+          const [];
 
       setState(() {
         _establishment = EstablishmentDetail(
           id: (establishmentMap['_id'] ?? widget.establishmentId).toString(),
-          name: (establishmentMap['name'] ?? widget.establishmentName ?? 'Barbería').toString(),
-          description: (establishmentMap['description'] ?? 'Sin descripción').toString(),
+          name:
+              (establishmentMap['name'] ??
+                      widget.establishmentName ??
+                      'Barbería')
+                  .toString(),
+          description: (establishmentMap['description'] ?? 'Sin descripción')
+              .toString(),
           photos: const [],
           address: (establishmentMap['address'] ?? '').toString(),
           city: (establishmentMap['city'] ?? '').toString(),
-          phone: (establishmentMap['phone'] ?? widget.establishmentPhone ?? '').toString(),
-          rating: (establishmentMap['rating'] is num ? establishmentMap['rating'] : 0).toDouble(),
-          reviewCount: (establishmentMap['reviewCount'] is num ? establishmentMap['reviewCount'] : reviewsList.length) as int,
+          phone: (establishmentMap['phone'] ?? widget.establishmentPhone ?? '')
+              .toString(),
+          rating:
+              (establishmentMap['rating'] is num
+                      ? establishmentMap['rating']
+                      : 0)
+                  .toDouble(),
+          reviewCount:
+              (establishmentMap['reviewCount'] is num
+                      ? establishmentMap['reviewCount']
+                      : reviewsList.length)
+                  as int,
         );
         _services = servicesList.whereType<Map<String, dynamic>>().map((item) {
           final rawCategory = item['category'] ?? 'General';
@@ -184,17 +214,21 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
             name: (item['name'] ?? 'Servicio').toString(),
             description: (item['description'] ?? '').toString(),
             price: (item['price'] is num ? item['price'] : 0).toInt(),
-            durationMin: (item['durationMin'] is num ? item['durationMin'] : 30).toInt(),
+            durationMin: (item['durationMin'] is num ? item['durationMin'] : 30)
+                .toInt(),
             category: rawCategory.toString(),
           );
         }).toList();
-        _professionals = professionalsList.whereType<Map<String, dynamic>>().map((item) {
-          return ProfessionalItem(
-            id: (item['_id'] ?? item['id'] ?? '').toString(),
-            name: (item['name'] ?? 'Profesional').toString(),
-            specialty: (item['specialty'] ?? 'Barbero').toString(),
-          );
-        }).toList();
+        _professionals = professionalsList
+            .whereType<Map<String, dynamic>>()
+            .map((item) {
+              return ProfessionalItem(
+                id: (item['_id'] ?? item['id'] ?? '').toString(),
+                name: (item['name'] ?? 'Profesional').toString(),
+                specialty: (item['specialty'] ?? 'Barbero').toString(),
+              );
+            })
+            .toList();
         _reviews = reviewsList.whereType<Map<String, dynamic>>().map((item) {
           final userMap = item['userId'];
           final userName = userMap is Map<String, dynamic>
@@ -212,11 +246,24 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
         _error = null;
       });
       if (token != null) {
-        final favoriteResponse = await http.get(Uri.parse('${ApiConfig.baseUrl}/favorites'), headers: {'Authorization': 'Bearer $token'});
+        final favoriteResponse = await http.get(
+          Uri.parse('${ApiConfig.baseUrl}/favorites'),
+          headers: {'Authorization': 'Bearer $token'},
+        );
         if (favoriteResponse.statusCode == 200 && mounted) {
           final body = _decodeBody(favoriteResponse.body);
           final favorites = body?['favorites'] as List? ?? [];
-          setState(() => _isFavorite = favorites.any((f) => f is Map && ((f['establishmentId'] is Map ? f['establishmentId']['_id'] : f['establishmentId']).toString() == widget.establishmentId)));
+          setState(
+            () => _isFavorite = favorites.any(
+              (f) =>
+                  f is Map &&
+                  ((f['establishmentId'] is Map
+                              ? f['establishmentId']['_id']
+                              : f['establishmentId'])
+                          .toString() ==
+                      widget.establishmentId),
+            ),
+          );
         }
       }
     } catch (error) {
@@ -242,10 +289,17 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
     return value is String ? value : null;
   }
 
-  void _goToReservation({String? serviceId, String? serviceName, int? price, int? durationMin}) {
+  void _goToReservation({
+    String? serviceId,
+    String? serviceName,
+    int? price,
+    int? durationMin,
+  }) {
     if (_services.isEmpty || serviceId == null || serviceId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No hay servicios disponibles para esta barbería.')),
+        const SnackBar(
+          content: Text('No hay servicios disponibles para esta barbería.'),
+        ),
       );
       return;
     }
@@ -282,42 +336,125 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
   Future<void> _toggleFavorite() async {
     final token = context.read<AuthProvider>().accessToken;
     if (token == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Inicia sesión para guardar favoritos')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Inicia sesión para guardar favoritos')),
+      );
       return;
     }
     final wasFavorite = _isFavorite;
-    final uri = Uri.parse('${ApiConfig.baseUrl}/favorites${wasFavorite ? '/${widget.establishmentId}' : ''}');
+    final uri = Uri.parse(
+      '${ApiConfig.baseUrl}/favorites${wasFavorite ? '/${widget.establishmentId}' : ''}',
+    );
     final response = wasFavorite
         ? await http.delete(uri, headers: {'Authorization': 'Bearer $token'})
-        : await http.post(uri, headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'}, body: jsonEncode({'establishmentId': widget.establishmentId}));
+        : await http.post(
+            uri,
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({'establishmentId': widget.establishmentId}),
+          );
     if (!mounted) return;
-    if (response.statusCode == 200 || response.statusCode == 201 || (!wasFavorite && response.statusCode == 409)) {
+    if (response.statusCode == 200 ||
+        response.statusCode == 201 ||
+        (!wasFavorite && response.statusCode == 409)) {
       setState(() => _isFavorite = !wasFavorite);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_isFavorite ? 'Agregado a favoritos' : 'Eliminado de favoritos')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _isFavorite ? 'Agregado a favoritos' : 'Eliminado de favoritos',
+          ),
+        ),
+      );
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo actualizar favoritos')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo actualizar favoritos')),
+      );
     }
   }
 
   Future<void> submitReview() async {
     final token = context.read<AuthProvider>().accessToken;
-    if (token == null) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Inicia sesión para escribir una reseña'))); return; }
+    if (token == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Inicia sesión para escribir una reseña')),
+      );
+      return;
+    }
     var rating = 5;
     final comment = TextEditingController();
-    final submit = await showDialog<bool>(context: context, builder: (dialogContext) => StatefulBuilder(builder: (context, setDialogState) => AlertDialog(
-      title: const Text('Escribe tu reseña'),
-      content: Column(mainAxisSize: MainAxisSize.min, children: [
-        Row(mainAxisAlignment: MainAxisAlignment.center, children: List.generate(5, (index) => IconButton(onPressed: () => setDialogState(() => rating = index + 1), icon: Icon(index < rating ? Icons.star : Icons.star_border, color: Colors.amber)))),
-        TextField(controller: comment, maxLength: 500, maxLines: 4, decoration: const InputDecoration(hintText: 'Cuéntanos cómo fue tu experiencia')),
-      ]),
-      actions: [TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')), FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Publicar'))],
-    )));
-    if (submit != true || !mounted) { comment.dispose(); return; }
-    final response = await http.post(Uri.parse('${ApiConfig.baseUrl}/reviews'), headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'}, body: jsonEncode({'establishmentId': widget.establishmentId, 'rating': rating, 'comment': comment.text.trim()}));
+    final submit = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Escribe tu reseña'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(
+                  5,
+                  (index) => IconButton(
+                    onPressed: () => setDialogState(() => rating = index + 1),
+                    icon: Icon(
+                      index < rating ? Icons.star : Icons.star_border,
+                      color: Colors.amber,
+                    ),
+                  ),
+                ),
+              ),
+              TextField(
+                controller: comment,
+                maxLength: 500,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  hintText: 'Cuéntanos cómo fue tu experiencia',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Publicar'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (submit != true || !mounted) {
+      comment.dispose();
+      return;
+    }
+    final response = await http.post(
+      Uri.parse('${ApiConfig.baseUrl}/reviews'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'establishmentId': widget.establishmentId,
+        'rating': rating,
+        'comment': comment.text.trim(),
+      }),
+    );
     comment.dispose();
     if (!mounted) return;
-    if (response.statusCode == 201) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Reseña publicada'))); await _loadData(); }
-    else ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo publicar la reseña')));
+    if (response.statusCode == 201) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Reseña publicada')));
+      await _loadData();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo publicar la reseña')),
+      );
+    }
   }
 
   // ============================================================
@@ -328,9 +465,7 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
     final theme = Theme.of(context);
 
     if (_isLoading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     if (_error != null) {
@@ -339,10 +474,7 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
-            child: Text(
-              _error!,
-              textAlign: TextAlign.center,
-            ),
+            child: Text(_error!, textAlign: TextAlign.center),
           ),
         ),
       );
@@ -425,11 +557,11 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
                     onPressed: _services.isEmpty
                         ? null
                         : () => _goToReservation(
-                              serviceId: _services.first.id,
-                              serviceName: _services.first.name,
-                              price: _services.first.price,
-                              durationMin: _services.first.durationMin,
-                            ),
+                            serviceId: _services.first.id,
+                            serviceName: _services.first.name,
+                            price: _services.first.price,
+                            durationMin: _services.first.durationMin,
+                          ),
                     icon: const Icon(Icons.calendar_month),
                     label: const Text(
                       'RESERVAR CITA',
@@ -445,7 +577,10 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
                   _buildServicesList(theme),
                   const SizedBox(height: 32),
                   _buildSectionTitle(
-                      theme, 'Nuestros profesionales', Icons.people_outline),
+                    theme,
+                    'Nuestros profesionales',
+                    Icons.people_outline,
+                  ),
                   const SizedBox(height: 12),
                   _buildProfessionalsList(theme),
                   const SizedBox(height: 32),
@@ -455,7 +590,14 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
                     Icons.star_outline,
                   ),
                   const SizedBox(height: 12),
-                  Align(alignment: Alignment.centerRight, child: TextButton.icon(onPressed: submitReview, icon: const Icon(Icons.rate_review_outlined), label: const Text('Escribir reseña'))),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: submitReview,
+                      icon: const Icon(Icons.rate_review_outlined),
+                      label: const Text('Escribir reseña'),
+                    ),
+                  ),
                   _buildReviewsList(theme),
                   const SizedBox(height: 32),
                   _buildSectionTitle(theme, 'Contacto', Icons.info_outline),
@@ -510,8 +652,11 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
         Expanded(
           child: Row(
             children: [
-              Icon(Icons.location_on_outlined,
-                  size: 16, color: theme.colorScheme.onSurfaceVariant),
+              Icon(
+                Icons.location_on_outlined,
+                size: 16,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
               const SizedBox(width: 4),
               Expanded(
                 child: Text(
@@ -632,8 +777,11 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    Icon(Icons.access_time,
-                        size: 14, color: theme.colorScheme.onSurfaceVariant),
+                    Icon(
+                      Icons.access_time,
+                      size: 14,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
                     const SizedBox(width: 4),
                     Text(
                       '${service.durationMin} min',
@@ -673,10 +821,7 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 14),
                     minimumSize: const Size(0, 32),
                   ),
-                  child: const Text(
-                    'Reservar',
-                    style: TextStyle(fontSize: 12),
-                  ),
+                  child: const Text('Reservar', style: TextStyle(fontSize: 12)),
                 ),
               ),
             ],
@@ -836,15 +981,14 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
       ),
       child: Column(
         children: [
-          _buildContactRow(theme, Icons.location_on_outlined,
-              '${_establishment.address}, ${_establishment.city}'),
+          _buildContactRow(
+            theme,
+            Icons.location_on_outlined,
+            '${_establishment.address}, ${_establishment.city}',
+          ),
           if (_establishment.phone.isNotEmpty) ...[
             const Divider(height: 20),
-            _buildContactRow(
-              theme,
-              Icons.phone_outlined,
-              _establishment.phone,
-            ),
+            _buildContactRow(theme, Icons.phone_outlined, _establishment.phone),
           ],
         ],
       ),
@@ -856,12 +1000,7 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
       children: [
         Icon(icon, size: 18, color: theme.colorScheme.primary),
         const SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            text,
-            style: const TextStyle(fontSize: 13),
-          ),
-        ),
+        Expanded(child: Text(text, style: const TextStyle(fontSize: 13))),
       ],
     );
   }

@@ -13,11 +13,14 @@ class BusinessShell extends StatelessWidget {
     ('/business', Icons.dashboard_outlined, 'Panel'),
     ('/business/agenda', Icons.calendar_month_outlined, 'Agenda'),
     ('/business/services', Icons.content_cut, 'Servicios'),
+    ('/business/professionals', Icons.groups_outlined, 'Equipo'),
     ('/business/profile', Icons.store_outlined, 'Mi negocio'),
   ];
 
   int _indexFromLocation(String location) {
-    final i = _tabs.indexWhere((t) => location.startsWith(t.$1));
+    final i = _tabs.indexWhere(
+      (t) => t.$1 == '/business' ? location == t.$1 : location.startsWith(t.$1),
+    );
     return i < 0 ? 0 : i;
   }
 
@@ -41,10 +44,7 @@ class BusinessShell extends StatelessWidget {
         selectedIndex: index,
         onDestinationSelected: (i) => context.go(_tabs[i].$1),
         destinations: _tabs
-            .map((t) => NavigationDestination(
-                  icon: Icon(t.$2),
-                  label: t.$3,
-                ))
+            .map((t) => NavigationDestination(icon: Icon(t.$2), label: t.$3))
             .toList(),
       ),
     );

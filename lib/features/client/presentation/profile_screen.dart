@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+
 import 'dart:convert';
+
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 
@@ -32,15 +34,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       final headers = {'Authorization': 'Bearer $token'};
       final responses = await Future.wait([
-        http.get(Uri.parse('${ApiConfig.baseUrl}/bookings/my'), headers: headers),
+        http.get(
+          Uri.parse('${ApiConfig.baseUrl}/bookings/my'),
+          headers: headers,
+        ),
         http.get(Uri.parse('${ApiConfig.baseUrl}/favorites'), headers: headers),
-        http.get(Uri.parse('${ApiConfig.baseUrl}/reviews/my'), headers: headers),
+        http.get(
+          Uri.parse('${ApiConfig.baseUrl}/reviews/my'),
+          headers: headers,
+        ),
       ]).timeout(const Duration(seconds: 15));
-      if (!mounted || responses.any((response) => response.statusCode != 200)) return;
+      if (!mounted || responses.any((response) => response.statusCode != 200)) {
+        return;
+      }
       List<dynamic> listAt(int index, String key) {
         final decoded = jsonDecode(responses[index].body);
-        return decoded is Map<String, dynamic> && decoded[key] is List ? decoded[key] as List : const [];
+        return decoded is Map<String, dynamic> && decoded[key] is List
+            ? decoded[key] as List
+            : const [];
       }
+
       setState(() {
         _bookingsCount = listAt(0, 'bookings').length;
         _favoritesCount = listAt(1, 'favorites').length;
@@ -59,13 +72,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Editar perfil'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: nameController, maxLength: 80, decoration: const InputDecoration(labelText: 'Nombre')),
-          TextField(controller: phoneController, keyboardType: TextInputType.phone, maxLength: 20, decoration: const InputDecoration(labelText: 'Teléfono')),
-        ]),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              maxLength: 80,
+              decoration: const InputDecoration(labelText: 'Nombre'),
+            ),
+            TextField(
+              controller: phoneController,
+              keyboardType: TextInputType.phone,
+              maxLength: 20,
+              decoration: const InputDecoration(labelText: 'Teléfono'),
+            ),
+          ],
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')),
-          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Guardar')),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Guardar'),
+          ),
         ],
       ),
     );
@@ -79,7 +110,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     nameController.dispose();
     phoneController.dispose();
     if (name.length < 2 || phone.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ingresa un nombre y teléfono válidos')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ingresa un nombre y teléfono válidos')),
+      );
       return;
     }
     final token = auth.accessToken;
@@ -87,20 +120,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       final response = await http.patch(
         Uri.parse('${ApiConfig.baseUrl}/auth/me'),
-        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
         body: jsonEncode({'name': name, 'phone': phone}),
       );
       if (!mounted) return;
       if (response.statusCode == 200) {
         auth.updateProfile(name: name, phone: phone);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Perfil actualizado')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Perfil actualizado')));
       } else {
         final decoded = jsonDecode(response.body);
-        final message = decoded is Map<String, dynamic> && decoded['message'] is String ? decoded['message'] as String : 'No se pudo actualizar el perfil';
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+        final message =
+            decoded is Map<String, dynamic> && decoded['message'] is String
+            ? decoded['message'] as String
+            : 'No se pudo actualizar el perfil';
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(message)));
       }
     } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo conectar para actualizar el perfil')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No se pudo conectar para actualizar el perfil'),
+          ),
+        );
+      }
     }
   }
 
@@ -110,8 +157,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Configuración de cuenta'),
-        content: Text('Correo de acceso: ${auth.userEmail ?? 'No disponible'}\n\nEl correo es el identificador de inicio de sesión. Puedes actualizar tu nombre y teléfono desde Editar perfil.'),
-        actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cerrar'))],
+        content: Text(
+          'Correo de acceso: ${auth.userEmail ?? 'No disponible'}\n\nEl correo es el identificador de inicio de sesión. Puedes actualizar tu nombre y teléfono desde Editar perfil.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cerrar'),
+          ),
+        ],
       ),
     );
   }
@@ -122,15 +176,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
       builder: (dialogContext) => AlertDialog(
         title: const Text('Ayuda'),
         content: const SingleChildScrollView(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-            Text('¿Cómo reservo una cita?\nBusca una barbería, elige un servicio y selecciona una hora disponible.'),
-            SizedBox(height: 12),
-            Text('¿Cómo cancelo una cita?\nAbre Mis reservas y cancela una cita futura pendiente o confirmada.'),
-            SizedBox(height: 12),
-            Text('¿Dónde encuentro mis barberías guardadas?\nEn Perfil, abre Mis favoritos.'),
-          ]),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '¿Cómo reservo una cita?\nBusca una barbería, elige un servicio y selecciona una hora disponible.',
+              ),
+              SizedBox(height: 12),
+              Text(
+                '¿Cómo cancelo una cita?\nAbre Mis reservas y cancela una cita futura pendiente o confirmada.',
+              ),
+              SizedBox(height: 12),
+              Text(
+                '¿Dónde encuentro mis barberías guardadas?\nEn Perfil, abre Mis favoritos.',
+              ),
+            ],
+          ),
         ),
-        actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cerrar'))],
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cerrar'),
+          ),
+        ],
       ),
     );
   }
@@ -177,12 +246,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
-          _buildHeader(
-            theme,
-            name: name,
-            email: email,
-            phone: auth.userPhone,
-          ),
+          _buildHeader(theme, name: name, email: email, phone: auth.userPhone),
           const SizedBox(height: 24),
           _buildStats(theme),
           const SizedBox(height: 24),

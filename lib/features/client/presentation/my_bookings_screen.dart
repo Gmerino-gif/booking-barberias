@@ -84,12 +84,17 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
 
       if (response.statusCode != 200) {
         final decoded = jsonDecode(response.body);
-        final message = decoded is Map<String, dynamic> ? decoded['message'] : null;
-        throw Exception(message is String ? message : 'No se pudieron cargar tus reservas');
+        final message = decoded is Map<String, dynamic>
+            ? decoded['message']
+            : null;
+        throw Exception(
+          message is String ? message : 'No se pudieron cargar tus reservas',
+        );
       }
 
       final decoded = jsonDecode(response.body);
-      final items = decoded is Map<String, dynamic> && decoded['bookings'] is List
+      final items =
+          decoded is Map<String, dynamic> && decoded['bookings'] is List
           ? decoded['bookings'] as List
           : <dynamic>[];
 
@@ -112,10 +117,18 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Cancelar reserva'),
-        content: Text('¿Quieres cancelar la cita de ${booking.serviceName} en ${booking.establishmentName}?'),
+        content: Text(
+          '¿Quieres cancelar la cita de ${booking.serviceName} en ${booking.establishmentName}?',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Volver')),
-          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Cancelar cita')),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Volver'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Cancelar cita'),
+          ),
         ],
       ),
     );
@@ -125,20 +138,34 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
     try {
       final response = await http.patch(
         Uri.parse('${ApiConfig.baseUrl}/bookings/${booking.id}/status'),
-        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
         body: jsonEncode({'status': 'cancelled'}),
       );
       if (!mounted) return;
       if (response.statusCode == 200) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Reserva cancelada')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Reserva cancelada')));
         await _loadBookings();
       } else {
         final body = jsonDecode(response.body);
-        final message = body is Map<String, dynamic> && body['message'] is String ? body['message'] as String : 'No se pudo cancelar la reserva';
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+        final message =
+            body is Map<String, dynamic> && body['message'] is String
+            ? body['message'] as String
+            : 'No se pudo cancelar la reserva';
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(message)));
       }
     } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo conectar para cancelar la reserva')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No se pudo conectar para cancelar la reserva'),
+          ),
+        );
+      }
     }
   }
 
@@ -149,28 +176,40 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
     final service = map['serviceId'];
     final professional = map['professionalId'];
     final startAtRaw = map['startAt'];
-    final startAt = DateTime.tryParse(startAtRaw?.toString() ?? '') ?? DateTime.now();
-    final duration = _readInt(map['durationMin']) ??
-        (service is Map<String, dynamic> ? _readInt(service['durationMin']) : null) ??
+    final startAt =
+        DateTime.tryParse(startAtRaw?.toString() ?? '') ?? DateTime.now();
+    final duration =
+        _readInt(map['durationMin']) ??
+        (service is Map<String, dynamic>
+            ? _readInt(service['durationMin'])
+            : null) ??
         30;
-    final price = _readInt(map['price']) ??
+    final price =
+        _readInt(map['price']) ??
         (service is Map<String, dynamic> ? _readInt(service['price']) : null) ??
         0;
 
     return BookingModel(
       id: (map['_id'] ?? map['id'] ?? '').toString(),
-      establishmentName: (establishment is Map<String, dynamic>
-              ? (establishment['name'] ?? map['establishmentName'] ?? 'Barbería')
-              : (map['establishmentName'] ?? 'Barbería'))
-          .toString(),
-      serviceName: (service is Map<String, dynamic>
-              ? (service['name'] ?? map['serviceName'] ?? 'Servicio')
-              : (map['serviceName'] ?? 'Servicio'))
-          .toString(),
-      professionalName: (professional is Map<String, dynamic>
-              ? (professional['name'] ?? map['professionalName'] ?? 'Profesional')
-              : (map['professionalName'] ?? 'Profesional'))
-          .toString(),
+      establishmentName:
+          (establishment is Map<String, dynamic>
+                  ? (establishment['name'] ??
+                        map['establishmentName'] ??
+                        'Barbería')
+                  : (map['establishmentName'] ?? 'Barbería'))
+              .toString(),
+      serviceName:
+          (service is Map<String, dynamic>
+                  ? (service['name'] ?? map['serviceName'] ?? 'Servicio')
+                  : (map['serviceName'] ?? 'Servicio'))
+              .toString(),
+      professionalName:
+          (professional is Map<String, dynamic>
+                  ? (professional['name'] ??
+                        map['professionalName'] ??
+                        'Profesional')
+                  : (map['professionalName'] ?? 'Profesional'))
+              .toString(),
       startAt: startAt,
       durationMin: duration,
       price: price,
@@ -209,8 +248,18 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
 
   static const _weekdays = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
   static const _months = [
-    'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
-    'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic',
+    'Ene',
+    'Feb',
+    'Mar',
+    'Abr',
+    'May',
+    'Jun',
+    'Jul',
+    'Ago',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dic',
   ];
 
   String _formatDate(DateTime date) {
@@ -240,13 +289,21 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
       case 'pending':
         return (color: Colors.orange, label: 'Pendiente', icon: Icons.schedule);
       case 'confirmed':
-        return (color: Colors.green, label: 'Confirmada', icon: Icons.check_circle);
+        return (
+          color: Colors.green,
+          label: 'Confirmada',
+          icon: Icons.check_circle,
+        );
       case 'completed':
         return (color: Colors.blue, label: 'Completada', icon: Icons.done_all);
       case 'cancelled':
         return (color: Colors.red, label: 'Cancelada', icon: Icons.cancel);
       case 'no_show':
-        return (color: Colors.grey, label: 'No asistió', icon: Icons.person_off);
+        return (
+          color: Colors.grey,
+          label: 'No asistió',
+          icon: Icons.person_off,
+        );
       default:
         return (color: Colors.grey, label: status, icon: Icons.info);
     }
@@ -308,7 +365,8 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
     return ListView.builder(
       padding: const EdgeInsets.all(16),
       itemCount: list.length,
-      itemBuilder: (context, index) => _buildBookingCard(list[index], isUpcoming),
+      itemBuilder: (context, index) =>
+          _buildBookingCard(list[index], isUpcoming),
     );
   }
 
@@ -325,7 +383,9 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
           ),
           const SizedBox(height: 16),
           Text(
-            isUpcoming ? 'No tienes reservas próximas' : 'Aún no tienes historial',
+            isUpcoming
+                ? 'No tienes reservas próximas'
+                : 'Aún no tienes historial',
             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 6),
@@ -347,7 +407,9 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
   Widget _buildBookingCard(BookingModel booking, bool isUpcoming) {
     final theme = Theme.of(context);
     final statusInfo = _getStatusInfo(booking.status);
-    final shortId = booking.id.length > 8 ? booking.id.substring(0, 8) : booking.id;
+    final shortId = booking.id.length > 8
+        ? booking.id.substring(0, 8)
+        : booking.id;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -406,7 +468,11 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
                 const SizedBox(height: 4),
                 Row(
                   children: [
-                    Icon(Icons.store, size: 14, color: theme.colorScheme.onSurfaceVariant),
+                    Icon(
+                      Icons.store,
+                      size: 14,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
                     const SizedBox(width: 4),
                     Expanded(
                       child: Text(
@@ -447,7 +513,11 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.notes, size: 14, color: theme.colorScheme.onSurfaceVariant),
+                        Icon(
+                          Icons.notes,
+                          size: 14,
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
@@ -479,7 +549,10 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
                       OutlinedButton(
                         onPressed: () => _cancelBooking(booking),
                         style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 0,
+                          ),
                           minimumSize: const Size(0, 32),
                         ),
                         child: const Text(
@@ -502,12 +575,7 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
       children: [
         Icon(icon, size: 14, color: theme.colorScheme.onSurfaceVariant),
         const SizedBox(width: 6),
-        Expanded(
-          child: Text(
-            text,
-            style: const TextStyle(fontSize: 13),
-          ),
-        ),
+        Expanded(child: Text(text, style: const TextStyle(fontSize: 13))),
       ],
     );
   }

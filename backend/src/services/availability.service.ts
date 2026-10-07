@@ -1,9 +1,9 @@
 import { Booking } from '../models/Booking.js';
 import { Professional } from '../models/Professional.js';
 import { Service } from '../models/Service.js';
+import { Establishment } from '../models/Establishment.js';
 
-const BUSINESS_END_MINUTES = 18 * 60;
-const SLOT_STARTS_MINUTES = [540, 600, 630, 660, 750, 840, 930, 960, 1050];
+const SLOT_INTERVAL_MINUTES = 30;
 
 export type AvailabilityInput = {
   establishmentId: string;
@@ -14,12 +14,13 @@ export type AvailabilityInput = {
 };
 
 export const getAvailableSlots = async (input: AvailabilityInput): Promise<string[]> => {
-  const [professional, service] = await Promise.all([
+  const [professional, service, establishment] = await Promise.all([
     Professional.findOne({ _id: input.professionalId, establishmentId: input.establishmentId }),
     Service.findOne({ _id: input.serviceId, establishmentId: input.establishmentId }),
+    Establishment.findById(input.establishmentId).select('openingMinutes closingMinutes'),
   ]);
 
-  if (!professional || !service) return [];
+  if (!professional || !service || !establishment) return [];
   if (professional.services.length > 0 && !professional.services.some((id) => id.toString() === input.serviceId)) return [];
 
   const dateParts = input.date.split('-').map(Number);
@@ -40,9 +41,14 @@ export const getAvailableSlots = async (input: AvailabilityInput): Promise<strin
     endAt: { $gt: dayStart },
   }).select('startAt endAt');
 
-  return SLOT_STARTS_MINUTES
-    .filter((minutes) => minutes + service.durationMin <= BUSINESS_END_MINUTES)
-    .map((minutes) => new Date(localMidnightUtc + minutes * 60_000))
+  const openingMinutes = establishment.openingMinutes ?? 540;
+  const closingMinutes = establishment.closingMinutes ?? 1080;
+  const candidates: Date[] = [];
+  for (let minutes = openingMinutes; minutes + service.durationMin <= closingMinutes; minutes += SLOT_INTERVAL_MINUTES) {
+    candidates.push(new Date(localMidnightUtc + minutes * 60_000));
+  }
+
+  return candidates
     .filter((startAt) => startAt > new Date())
     .filter((startAt) => {
       const endAt = new Date(startAt.getTime() + service.durationMin * 60_000);

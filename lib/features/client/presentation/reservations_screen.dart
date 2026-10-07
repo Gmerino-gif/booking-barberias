@@ -84,12 +84,20 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
 
       if (response.statusCode != 200) {
         final decoded = jsonDecode(response.body);
-        final message = decoded is Map<String, dynamic> ? decoded['message'] : null;
-        throw Exception(message is String ? message : 'No se pudieron cargar los profesionales');
+        final message = decoded is Map<String, dynamic>
+            ? decoded['message']
+            : null;
+        throw Exception(
+          message is String
+              ? message
+              : 'No se pudieron cargar los profesionales',
+        );
       }
 
       final decoded = jsonDecode(response.body);
-      final rawList = decoded is Map<String, dynamic> ? decoded['professionals'] : null;
+      final rawList = decoded is Map<String, dynamic>
+          ? decoded['professionals']
+          : null;
       final items = rawList is List ? rawList : const <dynamic>[];
 
       final professionals = items.whereType<Map<String, dynamic>>().map((item) {
@@ -103,7 +111,9 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
       setState(() {
         _professionals = professionals;
         _isLoading = false;
-        _error = professionals.isEmpty ? 'No hay profesionales disponibles para esta barbería' : null;
+        _error = professionals.isEmpty
+            ? 'No hay profesionales disponibles para esta barbería'
+            : null;
         if (_professionals.isNotEmpty) {
           _selectedProfessionalIndex = 0;
         }
@@ -132,23 +142,34 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     });
 
     try {
-      final date = '${selectedDate.year.toString().padLeft(4, '0')}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}';
-      final uri = Uri.parse('${ApiConfig.baseUrl}/bookings/availability').replace(queryParameters: {
-        'establishmentId': widget.establishmentId,
-        'professionalId': professional.id,
-        'serviceId': widget.serviceId,
-        'date': date,
-        'utcOffsetMinutes': selectedDate.timeZoneOffset.inMinutes.toString(),
-      });
+      final date =
+          '${selectedDate.year.toString().padLeft(4, '0')}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}';
+      final uri = Uri.parse('${ApiConfig.baseUrl}/bookings/availability')
+          .replace(
+            queryParameters: {
+              'establishmentId': widget.establishmentId,
+              'professionalId': professional.id,
+              'serviceId': widget.serviceId,
+              'date': date,
+              'utcOffsetMinutes': selectedDate.timeZoneOffset.inMinutes
+                  .toString(),
+            },
+          );
       final response = await http.get(uri).timeout(const Duration(seconds: 15));
-      if (response.statusCode != 200) throw Exception('No se pudieron cargar los horarios disponibles');
+      if (response.statusCode != 200) {
+        throw Exception('No se pudieron cargar los horarios disponibles');
+      }
       final decoded = jsonDecode(response.body);
-      final rawSlots = decoded is Map<String, dynamic> && decoded['slots'] is List ? decoded['slots'] as List : const <dynamic>[];
+      final rawSlots =
+          decoded is Map<String, dynamic> && decoded['slots'] is List
+          ? decoded['slots'] as List
+          : const <dynamic>[];
       final slots = <String, DateTime>{};
       for (final raw in rawSlots.whereType<String>()) {
         final local = DateTime.tryParse(raw)?.toLocal();
         if (local == null) continue;
-        final label = '${(local.hour % 12 == 0 ? 12 : local.hour % 12).toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')} ${local.hour >= 12 ? 'PM' : 'AM'}';
+        final label =
+            '${(local.hour % 12 == 0 ? 12 : local.hour % 12).toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')} ${local.hour >= 12 ? 'PM' : 'AM'}';
         slots[label] = local;
       }
       if (!mounted || requestId != _availabilityRequestId) return;
@@ -206,8 +227,12 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
 
       final decoded = jsonDecode(response.body);
       if (response.statusCode != 200 && response.statusCode != 201) {
-        final message = decoded is Map<String, dynamic> ? decoded['message'] : null;
-        throw Exception(message is String ? message : 'No se pudo crear la reserva');
+        final message = decoded is Map<String, dynamic>
+            ? decoded['message']
+            : null;
+        throw Exception(
+          message is String ? message : 'No se pudo crear la reserva',
+        );
       }
 
       await showDialog<void>(
@@ -271,21 +296,45 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
 
   static const _weekdays = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
   static const _months = [
-    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+    'Enero',
+    'Febrero',
+    'Marzo',
+    'Abril',
+    'Mayo',
+    'Junio',
+    'Julio',
+    'Agosto',
+    'Septiembre',
+    'Octubre',
+    'Noviembre',
+    'Diciembre',
   ];
   static const _monthsShort = [
-    'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
-    'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic',
+    'Ene',
+    'Feb',
+    'Mar',
+    'Abr',
+    'May',
+    'Jun',
+    'Jul',
+    'Ago',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dic',
   ];
 
   String _formatDayLabel(DateTime date) {
     final now = DateTime.now();
-    if (date.year == now.year && date.month == now.month && date.day == now.day) {
+    if (date.year == now.year &&
+        date.month == now.month &&
+        date.day == now.day) {
       return 'Hoy';
     }
     final tomorrow = now.add(const Duration(days: 1));
-    if (date.year == tomorrow.year && date.month == tomorrow.month && date.day == tomorrow.day) {
+    if (date.year == tomorrow.year &&
+        date.month == tomorrow.month &&
+        date.day == tomorrow.day) {
       return 'Mañana';
     }
     return '${_weekdays[date.weekday - 1]}, ${date.day} de ${_months[date.month - 1]}';
@@ -310,10 +359,13 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final selectedProfessional = _professionals.isNotEmpty && _selectedProfessionalIndex < _professionals.length
+    final selectedProfessional =
+        _professionals.isNotEmpty &&
+            _selectedProfessionalIndex < _professionals.length
         ? _professionals[_selectedProfessionalIndex]
         : null;
-    final canConfirm = _selectedHour != null && !_isSubmitting && _professionals.isNotEmpty;
+    final canConfirm =
+        _selectedHour != null && !_isSubmitting && _professionals.isNotEmpty;
 
     if (_isLoading) {
       return Scaffold(
@@ -397,10 +449,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
         const SizedBox(width: 10),
         Text(
           title,
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-          ),
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
       ],
     );
@@ -524,9 +573,20 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
   }
 
   Widget _buildHoursSelector(ThemeData theme) {
-    if (_isLoadingAvailability) return const Center(child: CircularProgressIndicator());
-    if (_availabilityError != null) return TextButton(onPressed: _loadAvailability, child: Text('$_availabilityError · Reintentar'));
-    if (_availableHours.isEmpty) return const Text('No hay horarios disponibles para esta fecha y profesional.');
+    if (_isLoadingAvailability) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_availabilityError != null) {
+      return TextButton(
+        onPressed: _loadAvailability,
+        child: Text('$_availabilityError · Reintentar'),
+      );
+    }
+    if (_availableHours.isEmpty) {
+      return const Text(
+        'No hay horarios disponibles para esta fecha y profesional.',
+      );
+    }
     return Wrap(
       spacing: 10,
       runSpacing: 10,
@@ -635,47 +695,51 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     );
   }
 
-  Widget _buildSummaryCard(ThemeData theme, ProfessionalOption? selectedProfessional) {
+  Widget _buildSummaryCard(
+    ThemeData theme,
+    ProfessionalOption? selectedProfessional,
+  ) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: theme.colorScheme.outlineVariant,
-        ),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
             'Resumen de tu reserva',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 14,
-            ),
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
           ),
           const SizedBox(height: 12),
-          _buildSummaryRow(Icons.calendar_today, _formatFullDate(_selectedDate)),
+          _buildSummaryRow(
+            Icons.calendar_today,
+            _formatFullDate(_selectedDate),
+          ),
           const SizedBox(height: 8),
-          _buildSummaryRow(Icons.access_time, _selectedHour ?? 'Sin hora seleccionada'),
+          _buildSummaryRow(
+            Icons.access_time,
+            _selectedHour ?? 'Sin hora seleccionada',
+          ),
           const SizedBox(height: 8),
           _buildSummaryRow(
             Icons.person_outline,
             selectedProfessional?.name ?? 'Sin profesional',
           ),
           const SizedBox(height: 8),
-          _buildSummaryRow(Icons.timer_outlined, '${widget.serviceDurationMin} min'),
+          _buildSummaryRow(
+            Icons.timer_outlined,
+            '${widget.serviceDurationMin} min',
+          ),
           const Divider(height: 24),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text(
                 'Total',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               Text(
                 _formatPrice(widget.servicePrice),
