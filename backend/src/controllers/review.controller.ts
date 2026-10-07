@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import { Review } from '../models/Review.js';
+import { Establishment } from '../models/Establishment.js';
 import type { AuthenticatedRequest } from '../middleware/auth.middleware.js';
 
 export const getEstablishmentReviews = async (req: Request, res: Response): Promise<void> => {
@@ -11,10 +12,19 @@ export const getEstablishmentReviews = async (req: Request, res: Response): Prom
   }
 
   try {
-    const reviews = await Review.find({ establishmentId }).sort({ createdAt: -1 }).limit(50);
+    const reviews = await Review.find({ establishmentId }).populate('userId', 'name').sort({ createdAt: -1 }).limit(50);
     res.status(200).json({ reviews });
   } catch {
     res.status(500).json({ message: 'Error al obtener las reseñas del establecimiento' });
+  }
+};
+
+export const getMyReviews = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const reviews = await Review.find({ userId: req.user!.id }).select('_id');
+    res.status(200).json({ reviews });
+  } catch {
+    res.status(500).json({ message: 'No se pudieron obtener tus reseñas' });
   }
 };
 
@@ -36,6 +46,11 @@ export const createReview = async (req: AuthenticatedRequest, res: Response): Pr
       rating,
       comment,
     });
+    const [summary] = await Review.aggregate([
+      { $match: { establishmentId: review.establishmentId } },
+      { $group: { _id: '$establishmentId', rating: { $avg: '$rating' } } },
+    ]);
+    await Establishment.findByIdAndUpdate(establishmentId, { rating: summary?.rating ?? 0 });
 
     res.status(201).json({
       message: 'Reseña creada exitosamente',
@@ -64,6 +79,12 @@ export const deleteReview = async (req: AuthenticatedRequest, res: Response): Pr
       res.status(404).json({ message: 'La reseña no existe o no tienes permiso para eliminarla' });
       return;
     }
+
+    const [summary] = await Review.aggregate([
+      { $match: { establishmentId: review.establishmentId } },
+      { $group: { _id: '$establishmentId', rating: { $avg: '$rating' } } },
+    ]);
+    await Establishment.findByIdAndUpdate(review.establishmentId, { rating: summary?.rating ?? 0 });
 
     res.status(200).json({
       message: 'Reseña eliminada exitosamente',

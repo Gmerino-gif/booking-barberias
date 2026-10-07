@@ -3,8 +3,10 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
+import 'package:provider/provider.dart';
 
 import '../../../core/network/api_config.dart';
+import '../../auth/providers/auth_provider.dart';
 
 class EstablishmentDetail {
   final String id;
@@ -122,6 +124,7 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
 
   Future<void> _loadData() async {
     try {
+      final token = context.read<AuthProvider>().accessToken;
       final establishmentUri = Uri.parse(
         '${ApiConfig.baseUrl}/establishments/${widget.establishmentId}',
       );
@@ -208,6 +211,14 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
         _isLoading = false;
         _error = null;
       });
+      if (token != null) {
+        final favoriteResponse = await http.get(Uri.parse('${ApiConfig.baseUrl}/favorites'), headers: {'Authorization': 'Bearer $token'});
+        if (favoriteResponse.statusCode == 200 && mounted) {
+          final body = _decodeBody(favoriteResponse.body);
+          final favorites = body?['favorites'] as List? ?? [];
+          setState(() => _isFavorite = favorites.any((f) => f is Map && ((f['establishmentId'] is Map ? f['establishmentId']['_id'] : f['establishmentId']).toString() == widget.establishmentId)));
+        }
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -268,16 +279,45 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
     return '\$${buf.toString()}';
   }
 
-  void _toggleFavorite() {
-    setState(() => _isFavorite = !_isFavorite);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          _isFavorite ? 'Agregado a favoritos' : 'Eliminado de favoritos',
-        ),
-        duration: const Duration(seconds: 1),
-      ),
-    );
+  Future<void> _toggleFavorite() async {
+    final token = context.read<AuthProvider>().accessToken;
+    if (token == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Inicia sesión para guardar favoritos')));
+      return;
+    }
+    final wasFavorite = _isFavorite;
+    final uri = Uri.parse('${ApiConfig.baseUrl}/favorites${wasFavorite ? '/${widget.establishmentId}' : ''}');
+    final response = wasFavorite
+        ? await http.delete(uri, headers: {'Authorization': 'Bearer $token'})
+        : await http.post(uri, headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'}, body: jsonEncode({'establishmentId': widget.establishmentId}));
+    if (!mounted) return;
+    if (response.statusCode == 200 || response.statusCode == 201 || (!wasFavorite && response.statusCode == 409)) {
+      setState(() => _isFavorite = !wasFavorite);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_isFavorite ? 'Agregado a favoritos' : 'Eliminado de favoritos')));
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo actualizar favoritos')));
+    }
+  }
+
+  Future<void> submitReview() async {
+    final token = context.read<AuthProvider>().accessToken;
+    if (token == null) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Inicia sesión para escribir una reseña'))); return; }
+    var rating = 5;
+    final comment = TextEditingController();
+    final submit = await showDialog<bool>(context: context, builder: (dialogContext) => StatefulBuilder(builder: (context, setDialogState) => AlertDialog(
+      title: const Text('Escribe tu reseña'),
+      content: Column(mainAxisSize: MainAxisSize.min, children: [
+        Row(mainAxisAlignment: MainAxisAlignment.center, children: List.generate(5, (index) => IconButton(onPressed: () => setDialogState(() => rating = index + 1), icon: Icon(index < rating ? Icons.star : Icons.star_border, color: Colors.amber)))),
+        TextField(controller: comment, maxLength: 500, maxLines: 4, decoration: const InputDecoration(hintText: 'Cuéntanos cómo fue tu experiencia')),
+      ]),
+      actions: [TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')), FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Publicar'))],
+    )));
+    if (submit != true || !mounted) { comment.dispose(); return; }
+    final response = await http.post(Uri.parse('${ApiConfig.baseUrl}/reviews'), headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'}, body: jsonEncode({'establishmentId': widget.establishmentId, 'rating': rating, 'comment': comment.text.trim()}));
+    comment.dispose();
+    if (!mounted) return;
+    if (response.statusCode == 201) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Reseña publicada'))); await _loadData(); }
+    else ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo publicar la reseña')));
   }
 
   // ============================================================
@@ -415,6 +455,7 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
                     Icons.star_outline,
                   ),
                   const SizedBox(height: 12),
+                  Align(alignment: Alignment.centerRight, child: TextButton.icon(onPressed: submitReview, icon: const Icon(Icons.rate_review_outlined), label: const Text('Escribir reseña'))),
                   _buildReviewsList(theme),
                   const SizedBox(height: 32),
                   _buildSectionTitle(theme, 'Contacto', Icons.info_outline),

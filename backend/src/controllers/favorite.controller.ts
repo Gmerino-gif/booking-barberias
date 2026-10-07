@@ -6,7 +6,7 @@ export const getFavorites = async (req: AuthenticatedRequest, res: Response): Pr
   try {
     const favorites = await Favorite.find({
       userId: req.user!.id,
-    });
+    }).populate('establishmentId');
     res.status(200).json({ favorites });
   } catch {
     res.status(500).json({ message: 'Error al obtener los favoritos' });

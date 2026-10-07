@@ -6,6 +6,7 @@ import {
   login,
   refresh,
   getMe,
+  updateMe,
   forgotPassword,
   resetPassword,
 } from '../controllers/auth.controller.js';
@@ -44,5 +45,6 @@ router.post('/refresh', refresh);
 
 // GET /api/auth/me
 router.get('/me', authenticate, getMe);
+router.patch('/me', authenticate, updateMe);
 
 export default router;

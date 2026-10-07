@@ -95,6 +95,12 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void updateProfile({required String name, required String phone}) {
+    _userName = name;
+    _userPhone = phone;
+    notifyListeners();
+  }
+
   /// Cambiar entre modo cliente y negocio (como Uber)
   void switchMode(UserRole newRole) {
     if (_role == null) return;

@@ -61,7 +61,15 @@ const validateEstablishmentInput = (
 
 export const getEstablishments = async (req: Request, res: Response): Promise<void> => {
   try {
-    const establishments = await Establishment.find().limit(50);
+    const query = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    const filter = query ? {
+      $or: [
+        { name: { $regex: query, $options: 'i' } },
+        { city: { $regex: query, $options: 'i' } },
+        { address: { $regex: query, $options: 'i' } },
+      ],
+    } : {};
+    const establishments = await Establishment.find(filter).limit(50);
     res.status(200).json({ establishments });
   } catch {
     res.status(500).json({ message: 'Error al obtener los establecimientos' });

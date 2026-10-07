@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 
+import '../../../core/network/api_config.dart';
 import '../../../core/modelos/user_role.dart';
 import '../../auth/providers/auth_provider.dart';
 
@@ -13,9 +16,124 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  final int _bookingsCount = 0;
-  final int _favoritesCount = 0;
-  final int _reviewsCount = 0;
+  int _bookingsCount = 0;
+  int _favoritesCount = 0;
+  int _reviewsCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStats();
+  }
+
+  Future<void> _loadStats() async {
+    final token = context.read<AuthProvider>().accessToken;
+    if (token == null) return;
+    try {
+      final headers = {'Authorization': 'Bearer $token'};
+      final responses = await Future.wait([
+        http.get(Uri.parse('${ApiConfig.baseUrl}/bookings/my'), headers: headers),
+        http.get(Uri.parse('${ApiConfig.baseUrl}/favorites'), headers: headers),
+        http.get(Uri.parse('${ApiConfig.baseUrl}/reviews/my'), headers: headers),
+      ]).timeout(const Duration(seconds: 15));
+      if (!mounted || responses.any((response) => response.statusCode != 200)) return;
+      List<dynamic> listAt(int index, String key) {
+        final decoded = jsonDecode(responses[index].body);
+        return decoded is Map<String, dynamic> && decoded[key] is List ? decoded[key] as List : const [];
+      }
+      setState(() {
+        _bookingsCount = listAt(0, 'bookings').length;
+        _favoritesCount = listAt(1, 'favorites').length;
+        _reviewsCount = listAt(2, 'reviews').length;
+      });
+    } catch (_) {
+      // Las estadísticas son secundarias; el perfil sigue disponible sin conexión.
+    }
+  }
+
+  Future<void> _editProfile() async {
+    final auth = context.read<AuthProvider>();
+    final nameController = TextEditingController(text: auth.userName ?? '');
+    final phoneController = TextEditingController(text: auth.userPhone ?? '');
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Editar perfil'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(controller: nameController, maxLength: 80, decoration: const InputDecoration(labelText: 'Nombre')),
+          TextField(controller: phoneController, keyboardType: TextInputType.phone, maxLength: 20, decoration: const InputDecoration(labelText: 'Teléfono')),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Guardar')),
+        ],
+      ),
+    );
+    if (accepted != true || !mounted) {
+      nameController.dispose();
+      phoneController.dispose();
+      return;
+    }
+    final name = nameController.text.trim();
+    final phone = phoneController.text.trim();
+    nameController.dispose();
+    phoneController.dispose();
+    if (name.length < 2 || phone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ingresa un nombre y teléfono válidos')));
+      return;
+    }
+    final token = auth.accessToken;
+    if (token == null) return;
+    try {
+      final response = await http.patch(
+        Uri.parse('${ApiConfig.baseUrl}/auth/me'),
+        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+        body: jsonEncode({'name': name, 'phone': phone}),
+      );
+      if (!mounted) return;
+      if (response.statusCode == 200) {
+        auth.updateProfile(name: name, phone: phone);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Perfil actualizado')));
+      } else {
+        final decoded = jsonDecode(response.body);
+        final message = decoded is Map<String, dynamic> && decoded['message'] is String ? decoded['message'] as String : 'No se pudo actualizar el perfil';
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      }
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo conectar para actualizar el perfil')));
+    }
+  }
+
+  void _showSettings() {
+    final auth = context.read<AuthProvider>();
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Configuración de cuenta'),
+        content: Text('Correo de acceso: ${auth.userEmail ?? 'No disponible'}\n\nEl correo es el identificador de inicio de sesión. Puedes actualizar tu nombre y teléfono desde Editar perfil.'),
+        actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cerrar'))],
+      ),
+    );
+  }
+
+  void _showHelp() {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Ayuda'),
+        content: const SingleChildScrollView(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+            Text('¿Cómo reservo una cita?\nBusca una barbería, elige un servicio y selecciona una hora disponible.'),
+            SizedBox(height: 12),
+            Text('¿Cómo cancelo una cita?\nAbre Mis reservas y cancela una cita futura pendiente o confirmada.'),
+            SizedBox(height: 12),
+            Text('¿Dónde encuentro mis barberías guardadas?\nEn Perfil, abre Mis favoritos.'),
+          ]),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cerrar'))],
+      ),
+    );
+  }
 
   Future<void> _logout() async {
     final auth = context.read<AuthProvider>();
@@ -238,14 +356,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             icon: Icons.favorite_outline,
             title: 'Mis favoritos',
             subtitle: 'Barberías guardadas',
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Mis favoritos (próximamente)'),
-                  duration: Duration(seconds: 1),
-                ),
-              );
-            },
+            onTap: () => context.go('/client/favorites'),
           ),
           const Divider(height: 1, indent: 60),
           _buildMenuItem(
@@ -253,29 +364,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
             icon: Icons.person_outline,
             title: 'Editar perfil',
             subtitle: 'Cambiar nombre, foto, teléfono',
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Editar perfil (próximamente)'),
-                  duration: Duration(seconds: 1),
-                ),
-              );
-            },
+            onTap: _editProfile,
           ),
           const Divider(height: 1, indent: 60),
           _buildMenuItem(
             theme,
             icon: Icons.settings_outlined,
             title: 'Configuración',
-            subtitle: 'Notificaciones, privacidad',
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Configuración (próximamente)'),
-                  duration: Duration(seconds: 1),
-                ),
-              );
-            },
+            subtitle: 'Cuenta y datos de acceso',
+            onTap: _showSettings,
           ),
           const Divider(height: 1, indent: 60),
           _buildMenuItem(
@@ -283,14 +380,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             icon: Icons.help_outline,
             title: 'Ayuda',
             subtitle: 'Preguntas frecuentes, soporte',
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Ayuda (próximamente)'),
-                  duration: Duration(seconds: 1),
-                ),
-              );
-            },
+            onTap: _showHelp,
           ),
         ],
       ),

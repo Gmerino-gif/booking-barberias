@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
@@ -16,6 +15,8 @@ import '../../features/splash/presentation/splash_screen.dart';
 import '../../features/client/presentation/reservations_screen.dart';
 import '../../features/client/presentation/establishment_detail_screen.dart';
 import '../../features/client/presentation/profile_screen.dart';
+import '../../features/client/presentation/search_screen.dart';
+import '../../features/client/presentation/favorites_screen.dart';
 
 class AppRouter {
   static final GoRouter router = GoRouter(
@@ -26,10 +27,11 @@ class AppRouter {
 
       final isSplash = path == '/splash';
       final isLogin = path == '/login';
+      final isPublicAuthRoute = isSplash || isLogin || path == '/register' || path == '/forgot-password' || path == '/reset-password';
 
       if (auth.status == AuthStatus.unauthenticated) {
-        if (isLogin || isSplash) return null;
-        // return '/login'; ← COMENTADO TEMPORALMENTE
+        if (isPublicAuthRoute) return null;
+        return '/login';
       }
 
       // Autenticado: sacarlo de splash/login
@@ -76,11 +78,8 @@ class AppRouter {
               establishmentPhone: state.uri.queryParameters['phone'],
             ),
           ),
-          GoRoute(
-            path: '/client/search',
-            builder: (_, _) =>
-                const Center(child: Text('Búsqueda de establecimientos')),
-          ),
+          GoRoute(path: '/client/search', builder: (_, _) => const SearchScreen()),
+          GoRoute(path: '/client/favorites', builder: (_, _) => const FavoritesScreen()),
           GoRoute(
             path: '/client/reservas',
             builder: (_, state) {

@@ -48,17 +48,11 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
   String? _error;
 
   List<ProfessionalOption> _professionals = const [];
-  final List<String> _availableHours = const [
-    '09:00 AM',
-    '10:00 AM',
-    '10:30 AM',
-    '11:00 AM',
-    '12:30 PM',
-    '02:00 PM',
-    '03:30 PM',
-    '04:00 PM',
-    '05:30 PM',
-  ];
+  List<String> _availableHours = const [];
+  final Map<String, DateTime> _slotStartAt = {};
+  bool _isLoadingAvailability = false;
+  String? _availabilityError;
+  int _availabilityRequestId = 0;
 
   DateTime _selectedDate = DateTime.now().add(const Duration(days: 1));
   String? _selectedHour;
@@ -114,11 +108,60 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
           _selectedProfessionalIndex = 0;
         }
       });
+      if (professionals.isNotEmpty) await _loadAvailability();
     } catch (error) {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
         _error = error.toString().replaceFirst('Exception: ', '');
+      });
+    }
+  }
+
+  Future<void> _loadAvailability() async {
+    if (_professionals.isEmpty) return;
+    final requestId = ++_availabilityRequestId;
+    final selectedDate = _selectedDate;
+    final professional = _professionals[_selectedProfessionalIndex];
+    setState(() {
+      _isLoadingAvailability = true;
+      _availabilityError = null;
+      _selectedHour = null;
+      _availableHours = const [];
+      _slotStartAt.clear();
+    });
+
+    try {
+      final date = '${selectedDate.year.toString().padLeft(4, '0')}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}';
+      final uri = Uri.parse('${ApiConfig.baseUrl}/bookings/availability').replace(queryParameters: {
+        'establishmentId': widget.establishmentId,
+        'professionalId': professional.id,
+        'serviceId': widget.serviceId,
+        'date': date,
+        'utcOffsetMinutes': selectedDate.timeZoneOffset.inMinutes.toString(),
+      });
+      final response = await http.get(uri).timeout(const Duration(seconds: 15));
+      if (response.statusCode != 200) throw Exception('No se pudieron cargar los horarios disponibles');
+      final decoded = jsonDecode(response.body);
+      final rawSlots = decoded is Map<String, dynamic> && decoded['slots'] is List ? decoded['slots'] as List : const <dynamic>[];
+      final slots = <String, DateTime>{};
+      for (final raw in rawSlots.whereType<String>()) {
+        final local = DateTime.tryParse(raw)?.toLocal();
+        if (local == null) continue;
+        final label = '${(local.hour % 12 == 0 ? 12 : local.hour % 12).toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')} ${local.hour >= 12 ? 'PM' : 'AM'}';
+        slots[label] = local;
+      }
+      if (!mounted || requestId != _availabilityRequestId) return;
+      setState(() {
+        _slotStartAt.addAll(slots);
+        _availableHours = slots.keys.toList();
+        _isLoadingAvailability = false;
+      });
+    } catch (error) {
+      if (!mounted || requestId != _availabilityRequestId) return;
+      setState(() {
+        _isLoadingAvailability = false;
+        _availabilityError = error.toString().replaceFirst('Exception: ', '');
       });
     }
   }
@@ -138,7 +181,8 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     setState(() => _isSubmitting = true);
 
     try {
-      final startAt = _buildSelectedDateTime();
+      final startAt = _slotStartAt[_selectedHour];
+      if (startAt == null) throw Exception('Selecciona un horario disponible');
       final professional = _professionals[_selectedProfessionalIndex];
       final response = await http
           .post(
@@ -151,7 +195,8 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
               'establishmentId': widget.establishmentId,
               'professionalId': professional.id,
               'serviceId': widget.serviceId,
-              'startAt': startAt.toIso8601String(),
+              'startAt': startAt.toUtc().toIso8601String(),
+              'utcOffsetMinutes': _selectedDate.timeZoneOffset.inMinutes,
               'notes': '',
             }),
           )
@@ -203,40 +248,6 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     }
   }
 
-  DateTime _buildSelectedDateTime() {
-    if (_selectedHour == null || _selectedHour!.isEmpty) {
-      return DateTime(
-        _selectedDate.year,
-        _selectedDate.month,
-        _selectedDate.day,
-        10,
-        0,
-      );
-    }
-
-    final parts = _selectedHour!.split(RegExp(r'\s+'));
-    final time = parts.first;
-    final meridiem = parts.length > 1 ? parts[1].toUpperCase() : 'AM';
-    final hourMinute = time.split(':');
-    var hour = int.parse(hourMinute[0]);
-    final minute = int.parse(hourMinute[1]);
-
-    if (meridiem == 'PM' && hour != 12) {
-      hour += 12;
-    }
-    if (meridiem == 'AM' && hour == 12) {
-      hour = 0;
-    }
-
-    return DateTime(
-      _selectedDate.year,
-      _selectedDate.month,
-      _selectedDate.day,
-      hour,
-      minute,
-    );
-  }
-
   Future<void> _pickDate() async {
     final now = DateTime.now();
     final picked = await showDatePicker(
@@ -254,6 +265,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
         _selectedDate = picked;
         _selectedHour = null;
       });
+      await _loadAvailability();
     }
   }
 
@@ -512,6 +524,9 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
   }
 
   Widget _buildHoursSelector(ThemeData theme) {
+    if (_isLoadingAvailability) return const Center(child: CircularProgressIndicator());
+    if (_availabilityError != null) return TextButton(onPressed: _loadAvailability, child: Text('$_availabilityError · Reintentar'));
+    if (_availableHours.isEmpty) return const Text('No hay horarios disponibles para esta fecha y profesional.');
     return Wrap(
       spacing: 10,
       runSpacing: 10,
@@ -555,7 +570,10 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
           final professional = _professionals[index];
           final selected = index == _selectedProfessionalIndex;
           return GestureDetector(
-            onTap: () => setState(() => _selectedProfessionalIndex = index),
+            onTap: () {
+              setState(() => _selectedProfessionalIndex = index);
+              _loadAvailability();
+            },
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 180),
               width: 150,

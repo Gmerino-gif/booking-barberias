@@ -432,6 +432,28 @@ class _BusinessAgendaScreenState extends State<BusinessAgendaScreen> {
   String? _error;
   List<_BookingSummary> _bookings = const [];
 
+  Future<void> _changeBookingStatus(_BookingSummary booking, String status) async {
+    final token = context.read<AuthProvider>().accessToken;
+    if (token == null) return;
+    try {
+      final response = await http.patch(
+        Uri.parse('${ApiConfig.baseUrl}/bookings/${booking.id}/status'),
+        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+        body: jsonEncode({'status': status}),
+      );
+      if (!mounted) return;
+      if (response.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Estado de la reserva actualizado')));
+        await _loadAgenda();
+      } else {
+        final body = _decodeBody(response.body);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_readMessage(body) ?? 'No se pudo actualizar la reserva')));
+      }
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo conectar para actualizar la reserva')));
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -693,6 +715,19 @@ class _BusinessAgendaScreenState extends State<BusinessAgendaScreen> {
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
+                                if (booking.status == 'pending' || booking.status == 'confirmed')
+                                  PopupMenuButton<String>(
+                                    tooltip: 'Actualizar reserva',
+                                    onSelected: (status) => _changeBookingStatus(booking, status),
+                                    itemBuilder: (_) => [
+                                      if (booking.status == 'pending') const PopupMenuItem(value: 'confirmed', child: Text('Confirmar')),
+                                      if (booking.status == 'pending' || booking.status == 'confirmed') const PopupMenuItem(value: 'cancelled', child: Text('Cancelar')),
+                                      if (booking.status == 'confirmed' && booking.startAt.isBefore(DateTime.now())) ...[
+                                        const PopupMenuItem(value: 'completed', child: Text('Marcar completada')),
+                                        const PopupMenuItem(value: 'no_show', child: Text('Marcar inasistencia')),
+                                      ],
+                                    ],
+                                  ),
                               ],
                             ),
                           ],

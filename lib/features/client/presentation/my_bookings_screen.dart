@@ -107,6 +107,41 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
     }
   }
 
+  Future<void> _cancelBooking(BookingModel booking) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Cancelar reserva'),
+        content: Text('¿Quieres cancelar la cita de ${booking.serviceName} en ${booking.establishmentName}?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Volver')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Cancelar cita')),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final token = context.read<AuthProvider>().accessToken;
+    if (token == null) return;
+    try {
+      final response = await http.patch(
+        Uri.parse('${ApiConfig.baseUrl}/bookings/${booking.id}/status'),
+        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+        body: jsonEncode({'status': 'cancelled'}),
+      );
+      if (!mounted) return;
+      if (response.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Reserva cancelada')));
+        await _loadBookings();
+      } else {
+        final body = jsonDecode(response.body);
+        final message = body is Map<String, dynamic> && body['message'] is String ? body['message'] as String : 'No se pudo cancelar la reserva';
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      }
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo conectar para cancelar la reserva')));
+    }
+  }
+
   BookingModel _mapBooking(dynamic item) {
     final map = item is Map<String, dynamic> ? item : <String, dynamic>{};
 
@@ -442,11 +477,7 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
                     ),
                     if (isUpcoming)
                       OutlinedButton(
-                        onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Cancelar reserva (próximamente)')),
-                          );
-                        },
+                        onPressed: () => _cancelBooking(booking),
                         style: OutlinedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
                           minimumSize: const Size(0, 32),

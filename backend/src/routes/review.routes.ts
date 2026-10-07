@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   getEstablishmentReviews,
+  getMyReviews,
   createReview,
   deleteReview,
 } from '../controllers/review.controller.js';
@@ -10,6 +11,7 @@ const router = Router();
 
 // Ruta pública (cualquier usuario puede ver las reseñas de un establecimiento)
 router.get('/establishment/:establishmentId', getEstablishmentReviews);
+router.get('/my', authenticate, getMyReviews);
 
 // Rutas protegidas (requieren autenticación para publicar o eliminar reseñas)
 router.post('/', authenticate, createReview);
