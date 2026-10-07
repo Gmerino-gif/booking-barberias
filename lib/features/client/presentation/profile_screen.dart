@@ -2,27 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/modelos/user_role.dart';
 import '../../auth/providers/auth_provider.dart';
-
-// ============================================================
-// MODELO DE USUARIO (hardcodeado por ahora)
-// ============================================================
-
-class UserProfile {
-  final String name;
-  final String email;
-  final String role; // 'client', 'owner', 'professional', 'admin'
-
-  const UserProfile({
-    required this.name,
-    required this.email,
-    required this.role,
-  });
-}
-
-// ============================================================
-// PANTALLA DE PERFIL DEL CLIENTE
-// ============================================================
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -32,22 +13,12 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  // --- Datos hardcodeados (después vienen del backend: GET /auth/me) ---
-  final UserProfile _user = const UserProfile(
-    name: 'Steven Santiago',
-    email: 'demo@test.com',
-    role: 'client',
-  );
+  final int _bookingsCount = 0;
+  final int _favoritesCount = 0;
+  final int _reviewsCount = 0;
 
-  // --- Contadores (hardcodeados, después vienen del backend) ---
-  final int _bookingsCount = 5;
-  final int _favoritesCount = 3;
-  final int _reviewsCount = 2;
-
-  // ============================================================
-  // Acciones
-  // ============================================================
-  void _logout() {
+  Future<void> _logout() async {
+    final auth = context.read<AuthProvider>();
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
@@ -60,9 +31,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: const Text('Cancelar'),
           ),
           FilledButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
-              context.go('/login');
+              await auth.logout();
+              if (mounted) context.go('/login');
             },
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
             child: const Text('Cerrar sesión'),
@@ -72,36 +44,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // ============================================================
-  // BUILD
-  // ============================================================
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final auth = context.watch<AuthProvider>();
+    final name = auth.userName?.trim().isNotEmpty == true
+        ? auth.userName!
+        : 'Usuario';
+    final email = auth.userEmail?.trim().isNotEmpty == true
+        ? auth.userEmail!
+        : 'usuario@booking-barberias.com';
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
-          // ---------- Header con avatar ----------
           _buildHeader(
             theme,
-            name: auth.userName ?? _user.name,
-            email: auth.userEmail ?? _user.email,
+            name: name,
+            email: email,
             phone: auth.userPhone,
           ),
           const SizedBox(height: 24),
-
-          // ---------- Stats ----------
           _buildStats(theme),
           const SizedBox(height: 24),
-
-          // ---------- Menú ----------
           _buildMenu(theme),
           const SizedBox(height: 16),
-
-          // ---------- Cerrar sesión ----------
           _buildLogoutButton(theme),
           const SizedBox(height: 24),
         ],
@@ -109,16 +77,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // ============================================================
-  // WIDGETS AUXILIARES
-  // ============================================================
-
   Widget _buildHeader(
     ThemeData theme, {
     required String name,
     required String email,
     String? phone,
   }) {
+    final role = context.read<AuthProvider>().role ?? UserRole.client;
     return Column(
       children: [
         CircleAvatar(
@@ -164,7 +129,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             borderRadius: BorderRadius.circular(20),
           ),
           child: Text(
-            _getRoleLabel(),
+            _getRoleLabel(role),
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.bold,
@@ -177,18 +142,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  String _getRoleLabel() {
-    switch (_user.role) {
-      case 'client':
+  String _getRoleLabel(UserRole role) {
+    switch (role) {
+      case UserRole.client:
         return 'CLIENTE';
-      case 'owner':
+      case UserRole.owner:
         return 'DUEÑO DE NEGOCIO';
-      case 'professional':
+      case UserRole.professional:
         return 'PROFESIONAL';
-      case 'admin':
+      case UserRole.admin:
         return 'ADMIN';
-      default:
-        return _user.role.toUpperCase();
     }
   }
 

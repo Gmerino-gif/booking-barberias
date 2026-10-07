@@ -82,7 +82,7 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
         digits.length < 7 ||
         digits.length > 15 ||
         phone.length > 20) {
-      return 'Ingresa un número válido';
+      return 'Ingresa un nÃºmero vÃ¡lido';
     }
     return null;
   }
@@ -98,7 +98,7 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
     final token = context.read<AuthProvider>().accessToken;
     if (token == null || token.isEmpty) {
       _showLocationMessage(
-        'No hay sesión activa para cargar tu negocio.',
+        'No hay sesiÃ³n activa para cargar tu negocio.',
         isError: true,
       );
       if (mounted) setState(() => _isLoading = false);
@@ -121,7 +121,7 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
             ? decoded['message'] as String?
             : null;
         _showLocationMessage(
-          message ?? 'No se pudo cargar la información del negocio.',
+          message ?? 'No se pudo cargar la informaciÃ³n del negocio.',
           isError: true,
         );
         setState(() => _isLoading = false);
@@ -157,7 +157,7 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
     } on TimeoutException {
       if (mounted) {
         _showLocationMessage(
-          'La carga tardó demasiado. Inténtalo de nuevo.',
+          'La carga tardÃ³ demasiado. IntÃ©ntalo de nuevo.',
           isError: true,
         );
         setState(() => _isLoading = false);
@@ -180,7 +180,7 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
     if (token == null || token.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Tu sesión expiró. Inicia sesión otra vez.'),
+          content: Text('Tu sesiÃ³n expirÃ³. Inicia sesiÃ³n otra vez.'),
         ),
       );
       return;
@@ -189,7 +189,7 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
     if (_selectedLocation == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Selecciona la ubicación del negocio en el mapa.'),
+          content: Text('Selecciona la ubicaciÃ³n del negocio en el mapa.'),
         ),
       );
       return;
@@ -239,7 +239,7 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('El servidor tardó demasiado en responder.'),
+            content: Text('El servidor tardÃ³ demasiado en responder.'),
           ),
         );
       }
@@ -255,7 +255,7 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Ocurrió un error al guardar el negocio.'),
+            content: Text('OcurriÃ³ un error al guardar el negocio.'),
           ),
         );
       }
@@ -269,7 +269,7 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
     try {
       if (!await Geolocator.isLocationServiceEnabled()) {
         _showLocationMessage(
-          'Activa la ubicación del dispositivo o elige el punto manualmente.',
+          'Activa la ubicaciÃ³n del dispositivo o elige el punto manualmente.',
           isError: true,
         );
         return;
@@ -299,11 +299,11 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
         confirmed: false,
       );
       _showLocationMessage(
-        'Ubicación GPS sugerida. Confirma que el pin coincide con tu negocio.',
+        'UbicaciÃ³n GPS sugerida. Confirma que el pin coincide con tu negocio.',
       );
     } catch (_) {
       _showLocationMessage(
-        'No se pudo obtener la ubicación. Puedes elegir manualmente en el mapa.',
+        'No se pudo obtener la ubicaciÃ³n. Puedes elegir manualmente en el mapa.',
         isError: true,
       );
     } finally {
@@ -376,21 +376,21 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
       if (!mounted || requestSequence != _searchRequestSequence) return;
       _setLocation(LatLng(latitude, longitude), confirmed: false);
       setState(() {
-        _locationSearchMessage = 'Lugar encontrado. Ajusta el pin hasta la ubicación exacta del negocio.';
+        _locationSearchMessage = 'Lugar encontrado. Ajusta el pin hasta la ubicaciÃ³n exacta del negocio.';
         _locationSearchHasError = false;
       });
     } on TimeoutException {
       if (mounted && requestSequence == _searchRequestSequence) {
         setState(() {
           _locationSearchMessage =
-              'La búsqueda tardó demasiado. Inténtalo de nuevo o mueve el pin.';
+              'La bÃºsqueda tardÃ³ demasiado. IntÃ©ntalo de nuevo o mueve el pin.';
           _locationSearchHasError = true;
         });
       }
     } catch (_) {
       if (mounted && requestSequence == _searchRequestSequence) {
         setState(() {
-          _locationSearchMessage = 'No se pudo buscar la ubicación. Revisa tu conexión o mueve el pin manualmente.';
+          _locationSearchMessage = 'No se pudo buscar la ubicaciÃ³n. Revisa tu conexiÃ³n o mueve el pin manualmente.';
           _locationSearchHasError = true;
         });
       }
@@ -457,7 +457,7 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Text(
-                        'Información del negocio',
+                        'InformaciÃ³n del negocio',
                         style: theme.textTheme.headlineSmall?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
@@ -486,11 +486,11 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
                         controller: _addressCtrl,
                         textCapitalization: TextCapitalization.words,
                         decoration: const InputDecoration(
-                          labelText: 'Dirección',
+                          labelText: 'DirecciÃ³n',
                           prefixIcon: Icon(Icons.location_on_outlined),
                         ),
                         validator: (value) =>
-                            _validateRequired(value, 'la dirección', 200),
+                            _validateRequired(value, 'la direcciÃ³n', 200),
                       ),
                       const SizedBox(height: 16),
                       TextFormField(
@@ -510,32 +510,32 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
                         maxLines: 4,
                         textCapitalization: TextCapitalization.sentences,
                         decoration: const InputDecoration(
-                          labelText: 'Descripción del negocio',
+                          labelText: 'DescripciÃ³n del negocio',
                           prefixIcon: Icon(Icons.description_outlined),
                         ),
                         validator: (value) =>
-                            _validateRequired(value, 'la descripción', 1000),
+                            _validateRequired(value, 'la descripciÃ³n', 1000),
                       ),
                       const SizedBox(height: 20),
                       FormField<LatLng>(
                         key: _locationFieldKey,
                         validator: (_) => _selectedLocation == null
-                            ? 'Selecciona la ubicación del establecimiento'
+                            ? 'Selecciona la ubicaciÃ³n del establecimiento'
                             : !_locationConfirmed
-                            ? 'Confirma que el pin esté en el negocio'
+                            ? 'Confirma que el pin estÃ© en el negocio'
                             : null,
                         builder: (field) => Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             Text(
-                              'Ubicación del negocio',
+                              'UbicaciÃ³n del negocio',
                               style: theme.textTheme.titleMedium?.copyWith(
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              'Busca la zona o mueve el pin hasta la ubicación exacta del local.',
+                              'Busca la zona o mueve el pin hasta la ubicaciÃ³n exacta del local.',
                               style: theme.textTheme.bodySmall?.copyWith(
                                 color: theme.colorScheme.onSurfaceVariant,
                               ),
@@ -590,8 +590,8 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
                                   : const Icon(Icons.my_location),
                               label: Text(
                                 _isGettingLocation
-                                    ? 'Obteniendo ubicación…'
-                                    : 'Sugerir mi ubicación',
+                                    ? 'Obteniendo ubicaciÃ³nâ€¦'
+                                    : 'Sugerir mi ubicaciÃ³n',
                               ),
                             ),
                             const SizedBox(height: 10),
@@ -659,7 +659,7 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
                                     RichAttributionWidget(
                                       attributions: [
                                         TextSourceAttribution(
-                                          '© OpenStreetMap contributors',
+                                          'Â© OpenStreetMap contributors',
                                         ),
                                       ],
                                     ),
@@ -670,7 +670,7 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
                             const SizedBox(height: 8),
                             if (_selectedLocation != null)
                               Text(
-                                'Pin ${_locationConfirmed ? 'confirmado' : 'sugerido'} · '
+                                'Pin ${_locationConfirmed ? 'confirmado' : 'sugerido'} Â· '
                                 '${_selectedLocation!.latitude.toStringAsFixed(6)}, '
                                 '${_selectedLocation!.longitude.toStringAsFixed(6)}',
                                 style: theme.textTheme.bodySmall?.copyWith(
@@ -747,3 +747,4 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
     );
   }
 }
+

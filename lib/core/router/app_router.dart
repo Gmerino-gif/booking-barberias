@@ -116,11 +116,11 @@ class AppRouter {
           ),
           GoRoute(
             path: '/business/agenda',
-            builder: (_, _) => const Center(child: Text('Agenda')),
+            builder: (_, _) => const BusinessAgendaScreen(),
           ),
           GoRoute(
             path: '/business/services',
-            builder: (_, _) => const Center(child: Text('CRUD de servicios')),
+            builder: (_, _) => const BusinessServicesScreen(),
           ),
           GoRoute(
             path: '/business/profile',

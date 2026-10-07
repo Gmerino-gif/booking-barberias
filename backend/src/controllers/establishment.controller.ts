@@ -68,6 +68,27 @@ export const getEstablishments = async (req: Request, res: Response): Promise<vo
   }
 };
 
+export const getEstablishmentById = async (req: Request, res: Response): Promise<void> => {
+  const establishmentId = typeof req.params.id === 'string' ? req.params.id.trim() : '';
+
+  if (!establishmentId) {
+    res.status(400).json({ message: 'El ID del establecimiento es requerido' });
+    return;
+  }
+
+  try {
+    const establishment = await Establishment.findById(establishmentId);
+    if (!establishment) {
+      res.status(404).json({ message: 'Establecimiento no encontrado' });
+      return;
+    }
+
+    res.status(200).json({ establishment: serializeEstablishment(establishment.toObject()) });
+  } catch {
+    res.status(500).json({ message: 'Error al obtener el establecimiento' });
+  }
+};
+
 export const getMyEstablishment = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const establishment = await Establishment.findOne({ ownerId: req.user!.id });

@@ -1,8 +1,11 @@
-import 'package:flutter/material.dart';
+import 'dart:convert';
 
-// ============================================================
-// MODELO DE RESERVA (hardcodeado por ahora)
-// ============================================================
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:provider/provider.dart';
+
+import '../../../core/network/api_config.dart';
+import '../../auth/providers/auth_provider.dart';
 
 class BookingModel {
   final String id;
@@ -12,7 +15,7 @@ class BookingModel {
   final DateTime startAt;
   final int durationMin;
   final int price;
-  final String status; // pending, confirmed, completed, cancelled, no_show
+  final String status;
   final String notes;
 
   const BookingModel({
@@ -28,10 +31,6 @@ class BookingModel {
   });
 }
 
-// ============================================================
-// PANTALLA MIS RESERVAS
-// ============================================================
-
 class MyBookingsScreen extends StatefulWidget {
   const MyBookingsScreen({super.key});
 
@@ -41,68 +40,16 @@ class MyBookingsScreen extends StatefulWidget {
 
 class _MyBookingsScreenState extends State<MyBookingsScreen>
     with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-
-  // --- Datos hardcodeados (después vienen del backend) ---
-  final List<BookingModel> _bookings = [
-    BookingModel(
-      id: 'b1',
-      establishmentName: 'Barbería El Rey',
-      serviceName: 'Corte + Barba',
-      professionalName: 'Carlos M.',
-      startAt: DateTime.now().add(const Duration(days: 2, hours: 3)),
-      durationMin: 45,
-      price: 35000,
-      status: 'confirmed',
-      notes: 'Prefiero máquina del 2',
-    ),
-    BookingModel(
-      id: 'b2',
-      establishmentName: 'Barbería El Rey',
-      serviceName: 'Corte Clásico',
-      professionalName: 'Andrés R.',
-      startAt: DateTime.now().add(const Duration(days: 5, hours: 1)),
-      durationMin: 30,
-      price: 25000,
-      status: 'pending',
-    ),
-    BookingModel(
-      id: 'b3',
-      establishmentName: 'Barbería El Rey',
-      serviceName: 'Fade Premium',
-      professionalName: 'Luis P.',
-      startAt: DateTime.now().subtract(const Duration(days: 3)),
-      durationMin: 40,
-      price: 30000,
-      status: 'completed',
-      notes: 'Excelente servicio',
-    ),
-    BookingModel(
-      id: 'b4',
-      establishmentName: 'Barbería El Rey',
-      serviceName: 'Perfilado de Barba',
-      professionalName: 'Carlos M.',
-      startAt: DateTime.now().subtract(const Duration(days: 10)),
-      durationMin: 20,
-      price: 15000,
-      status: 'cancelled',
-    ),
-    BookingModel(
-      id: 'b5',
-      establishmentName: 'Barbería El Rey',
-      serviceName: 'Corte Clásico',
-      professionalName: 'Andrés R.',
-      startAt: DateTime.now().subtract(const Duration(days: 20)),
-      durationMin: 30,
-      price: 25000,
-      status: 'no_show',
-    ),
-  ];
+  late final TabController _tabController;
+  bool _isLoading = true;
+  String? _error;
+  List<BookingModel> _bookings = const [];
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _loadBookings();
   }
 
   @override
@@ -111,59 +58,148 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
     super.dispose();
   }
 
-  // --- Filtros ---
+  Future<void> _loadBookings() async {
+    final token = context.read<AuthProvider>().accessToken;
+    if (token == null || token.isEmpty) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _error = 'Inicia sesiÃ³n para ver tus reservas';
+      });
+      return;
+    }
+
+    try {
+      final response = await http
+          .get(
+            Uri.parse('${ApiConfig.baseUrl}/bookings/my'),
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Content-Type': 'application/json; charset=UTF-8',
+            },
+          )
+          .timeout(const Duration(seconds: 15));
+
+      if (!mounted) return;
+
+      if (response.statusCode != 200) {
+        final decoded = jsonDecode(response.body);
+        final message = decoded is Map<String, dynamic> ? decoded['message'] : null;
+        throw Exception(message is String ? message : 'No se pudieron cargar tus reservas');
+      }
+
+      final decoded = jsonDecode(response.body);
+      final items = decoded is Map<String, dynamic> && decoded['bookings'] is List
+          ? decoded['bookings'] as List
+          : <dynamic>[];
+
+      setState(() {
+        _bookings = items.map<BookingModel>(_mapBooking).toList();
+        _isLoading = false;
+        _error = null;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _error = error.toString().replaceFirst('Exception: ', '');
+      });
+    }
+  }
+
+  BookingModel _mapBooking(dynamic item) {
+    final map = item is Map<String, dynamic> ? item : <String, dynamic>{};
+
+    final establishment = map['establishmentId'];
+    final service = map['serviceId'];
+    final professional = map['professionalId'];
+    final startAtRaw = map['startAt'];
+    final startAt = DateTime.tryParse(startAtRaw?.toString() ?? '') ?? DateTime.now();
+    final duration = _readInt(map['durationMin']) ??
+        (service is Map<String, dynamic> ? _readInt(service['durationMin']) : null) ??
+        30;
+    final price = _readInt(map['price']) ??
+        (service is Map<String, dynamic> ? _readInt(service['price']) : null) ??
+        0;
+
+    return BookingModel(
+      id: (map['_id'] ?? map['id'] ?? '').toString(),
+      establishmentName: (establishment is Map<String, dynamic>
+              ? (establishment['name'] ?? map['establishmentName'] ?? 'BarberÃ­a')
+              : (map['establishmentName'] ?? 'BarberÃ­a'))
+          .toString(),
+      serviceName: (service is Map<String, dynamic>
+              ? (service['name'] ?? map['serviceName'] ?? 'Servicio')
+              : (map['serviceName'] ?? 'Servicio'))
+          .toString(),
+      professionalName: (professional is Map<String, dynamic>
+              ? (professional['name'] ?? map['professionalName'] ?? 'Profesional')
+              : (map['professionalName'] ?? 'Profesional'))
+          .toString(),
+      startAt: startAt,
+      durationMin: duration,
+      price: price,
+      status: (map['status'] ?? 'pending').toString(),
+      notes: (map['notes'] ?? '').toString(),
+    );
+  }
+
+  int? _readInt(dynamic value) {
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value);
+    return null;
+  }
+
   List<BookingModel> get _upcoming {
     final now = DateTime.now();
-    return _bookings.where((b) {
-      return b.startAt.isAfter(now) &&
-          (b.status == 'pending' || b.status == 'confirmed');
-    }).toList()
-      ..sort((a, b) => a.startAt.compareTo(b.startAt));
+    final upcoming = _bookings.where((booking) {
+      return booking.startAt.isAfter(now) &&
+          (booking.status == 'pending' || booking.status == 'confirmed');
+    }).toList();
+    upcoming.sort((a, b) => a.startAt.compareTo(b.startAt));
+    return upcoming;
   }
 
   List<BookingModel> get _history {
     final now = DateTime.now();
-    return _bookings.where((b) {
-      return b.startAt.isBefore(now) ||
-          b.status == 'completed' ||
-          b.status == 'cancelled' ||
-          b.status == 'no_show';
-    }).toList()
-      ..sort((a, b) => b.startAt.compareTo(a.startAt));
+    final history = _bookings.where((booking) {
+      return booking.startAt.isBefore(now) ||
+          booking.status == 'completed' ||
+          booking.status == 'cancelled' ||
+          booking.status == 'no_show';
+    }).toList();
+    history.sort((a, b) => b.startAt.compareTo(a.startAt));
+    return history;
   }
 
-  // ============================================================
-  // Utilidades
-  // ============================================================
-  static const _weekdays = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+  static const _weekdays = ['Lun', 'Mar', 'MiÃ©', 'Jue', 'Vie', 'SÃ¡b', 'Dom'];
   static const _months = [
     'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
     'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic',
   ];
 
-  String _formatDate(DateTime d) {
-    return '${_weekdays[d.weekday - 1]} ${d.day} ${_months[d.month - 1]} ${d.year}';
+  String _formatDate(DateTime date) {
+    return '${_weekdays[date.weekday - 1]} ${date.day} ${_months[date.month - 1]} ${date.year}';
   }
 
-  String _formatTime(DateTime d) {
-    final h = d.hour.toString().padLeft(2, '0');
-    final m = d.minute.toString().padLeft(2, '0');
-    return '$h:$m';
+  String _formatTime(DateTime date) {
+    final hour = date.hour.toString().padLeft(2, '0');
+    final minute = date.minute.toString().padLeft(2, '0');
+    return '$hour:$minute';
   }
 
   String _formatPrice(int value) {
-    final str = value.toString();
-    final buf = StringBuffer();
-    for (int i = 0; i < str.length; i++) {
-      if (i > 0 && (str.length - i) % 3 == 0) buf.write('.');
-      buf.write(str[i]);
+    final raw = value.toString();
+    final buffer = StringBuffer();
+    for (var index = 0; index < raw.length; index++) {
+      if (index > 0 && (raw.length - index) % 3 == 0) {
+        buffer.write('.');
+      }
+      buffer.write(raw[index]);
     }
-    return '\$${buf.toString()}';
+    return '\$${buffer.toString()}';
   }
 
-  // ============================================================
-  // Estado (colores y texto)
-  // ============================================================
   ({Color color, String label, IconData icon}) _getStatusInfo(String status) {
     switch (status) {
       case 'pending':
@@ -175,22 +211,33 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
       case 'cancelled':
         return (color: Colors.red, label: 'Cancelada', icon: Icons.cancel);
       case 'no_show':
-        return (color: Colors.grey, label: 'No asistió', icon: Icons.person_off);
+        return (color: Colors.grey, label: 'No asistiÃ³', icon: Icons.person_off);
       default:
         return (color: Colors.grey, label: status, icon: Icons.info);
     }
   }
 
-  // ============================================================
-  // BUILD
-  // ============================================================
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
+    if (_isLoading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    if (_error != null) {
+      return Scaffold(
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text(_error!, textAlign: TextAlign.center),
+          ),
+        ),
+      );
+    }
+
     return Column(
       children: [
-        // Tabs
         Container(
           color: theme.colorScheme.surface,
           child: TabBar(
@@ -200,13 +247,11 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
             indicatorColor: theme.colorScheme.secondary,
             indicatorWeight: 3,
             tabs: const [
-              Tab(text: 'Próximas'),
+              Tab(text: 'PrÃ³ximas'),
               Tab(text: 'Historial'),
             ],
           ),
         ),
-
-        // Contenido
         Expanded(
           child: TabBarView(
             controller: _tabController,
@@ -228,7 +273,7 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
     return ListView.builder(
       padding: const EdgeInsets.all(16),
       itemCount: list.length,
-      itemBuilder: (context, i) => _buildBookingCard(list[i], isUpcoming),
+      itemBuilder: (context, index) => _buildBookingCard(list[index], isUpcoming),
     );
   }
 
@@ -245,17 +290,14 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
           ),
           const SizedBox(height: 16),
           Text(
-            isUpcoming ? 'No tienes reservas próximas' : 'Aún no tienes historial',
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-            ),
+            isUpcoming ? 'No tienes reservas prÃ³ximas' : 'AÃºn no tienes historial',
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 6),
           Text(
             isUpcoming
-                ? 'Cuando reserves una cita aparecerá aquí'
-                : 'Tus reservas anteriores aparecerán aquí',
+                ? 'Cuando reserves una cita aparecerÃ¡ aquÃ­'
+                : 'Tus reservas anteriores aparecerÃ¡n aquÃ­',
             style: TextStyle(
               fontSize: 13,
               color: theme.colorScheme.onSurfaceVariant,
@@ -270,6 +312,7 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
   Widget _buildBookingCard(BookingModel booking, bool isUpcoming) {
     final theme = Theme.of(context);
     final statusInfo = _getStatusInfo(booking.status);
+    final shortId = booking.id.length > 8 ? booking.id.substring(0, 8) : booking.id;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -280,7 +323,6 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
       ),
       child: Column(
         children: [
-          // ---------- Header con estado ----------
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
@@ -305,7 +347,7 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
                 ),
                 const Spacer(),
                 Text(
-                  '#${booking.id}',
+                  '#$shortId',
                   style: TextStyle(
                     fontSize: 11,
                     color: theme.colorScheme.onSurfaceVariant,
@@ -314,14 +356,11 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
               ],
             ),
           ),
-
-          // ---------- Contenido ----------
           Padding(
             padding: const EdgeInsets.all(14),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Servicio
                 Text(
                   booking.serviceName,
                   style: const TextStyle(
@@ -330,48 +369,39 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
                   ),
                 ),
                 const SizedBox(height: 4),
-
-                // Barbería
                 Row(
                   children: [
-                    Icon(Icons.store,
-                        size: 14, color: theme.colorScheme.onSurfaceVariant),
+                    Icon(Icons.store, size: 14, color: theme.colorScheme.onSurfaceVariant),
                     const SizedBox(width: 4),
-                    Text(
-                      booking.establishmentName,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: theme.colorScheme.onSurfaceVariant,
+                    Expanded(
+                      child: Text(
+                        booking.establishmentName,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 10),
-
-                // Fecha y hora
                 _buildInfoRow(
                   theme,
                   Icons.calendar_today,
-                  '${_formatDate(booking.startAt)} · ${_formatTime(booking.startAt)}',
+                  '${_formatDate(booking.startAt)} Â· ${_formatTime(booking.startAt)}',
                 ),
                 const SizedBox(height: 6),
-
-                // Profesional
                 _buildInfoRow(
                   theme,
                   Icons.person_outline,
                   booking.professionalName,
                 ),
                 const SizedBox(height: 6),
-
-                // Duración
                 _buildInfoRow(
                   theme,
                   Icons.timer_outlined,
                   '${booking.durationMin} min',
                 ),
-
-                // Notas (si hay)
                 if (booking.notes.isNotEmpty) ...[
                   const SizedBox(height: 10),
                   Container(
@@ -382,9 +412,7 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.notes,
-                            size: 14,
-                            color: theme.colorScheme.onSurfaceVariant),
+                        Icon(Icons.notes, size: 14, color: theme.colorScheme.onSurfaceVariant),
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
@@ -400,10 +428,7 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
                     ),
                   ),
                 ],
-
                 const Divider(height: 24),
-
-                // Precio + botones
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -416,46 +441,20 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
                       ),
                     ),
                     if (isUpcoming)
-                      Row(
-                        children: [
-                          OutlinedButton(
-                            onPressed: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Cancelar (próximamente)'),
-                                ),
-                              );
-                            },
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 0),
-                              minimumSize: const Size(0, 32),
-                            ),
-                            child: const Text(
-                              'Cancelar',
-                              style: TextStyle(fontSize: 12),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          FilledButton(
-                            onPressed: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Ver detalle (próximamente)'),
-                                ),
-                              );
-                            },
-                            style: FilledButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 0),
-                              minimumSize: const Size(0, 32),
-                            ),
-                            child: const Text(
-                              'Ver detalle',
-                              style: TextStyle(fontSize: 12),
-                            ),
-                          ),
-                        ],
+                      OutlinedButton(
+                        onPressed: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Cancelar reserva (prÃ³ximamente)')),
+                          );
+                        },
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                          minimumSize: const Size(0, 32),
+                        ),
+                        child: const Text(
+                          'Cancelar',
+                          style: TextStyle(fontSize: 12),
+                        ),
                       ),
                   ],
                 ),

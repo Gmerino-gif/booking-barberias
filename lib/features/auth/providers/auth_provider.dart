@@ -4,8 +4,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
-import '../../../core/network/api_config.dart';
 import '../../../core/modelos/user_role.dart';
+import '../../../core/network/api_config.dart';
 
 enum AuthStatus { unknown, authenticated, unauthenticated }
 

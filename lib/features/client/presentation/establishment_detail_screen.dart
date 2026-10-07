@@ -1,9 +1,10 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:http/http.dart' as http;
 
-// ============================================================
-// MODELOS (hardcodeados por ahora, luego vienen del backend)
-// ============================================================
+import '../../../core/network/api_config.dart';
 
 class EstablishmentDetail {
   final String id;
@@ -75,10 +76,6 @@ class ReviewItem {
   });
 }
 
-// ============================================================
-// PANTALLA DE DETALLE DE BARBERÍA
-// ============================================================
-
 class EstablishmentDetailScreen extends StatefulWidget {
   final String establishmentId;
   final String? establishmentName;
@@ -96,100 +93,167 @@ class EstablishmentDetailScreen extends StatefulWidget {
       _EstablishmentDetailScreenState();
 }
 
-class _EstablishmentDetailScreenState
-    extends State<EstablishmentDetailScreen> {
+class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
   bool _isFavorite = false;
+  bool _isLoading = true;
+  String? _error;
 
-  // --- Datos hardcodeados (después vienen del backend) ---
-  EstablishmentDetail get _establishment => EstablishmentDetail(
-    id: widget.establishmentId,
-    name: widget.establishmentName ?? 'Barbería',
-    description:
-        'Somos una barbería con más de 10 años de experiencia en el mercado. '
-        'Ofrecemos cortes clásicos, modernos y tratamientos de barba con los '
-        'mejores productos del mercado. Ambiente familiar y profesional.',
+  EstablishmentDetail _establishment = const EstablishmentDetail(
+    id: '',
+    name: 'Barbería',
+    description: '',
     photos: [],
-    address: 'Calle 80 #45-12, Local 3',
-    city: 'Barranquilla, Atlántico',
-    phone: widget.establishmentPhone ?? '',
-    rating: 4.8,
-    reviewCount: 124,
+    address: '',
+    city: '',
+    phone: '',
+    rating: 0,
+    reviewCount: 0,
   );
 
-  final List<ServiceItem> _services = const [
-    ServiceItem(
-      id: 's1',
-      name: 'Corte Clásico',
-      description: 'Corte de cabello tradicional con tijera y máquina',
-      price: 25000,
-      durationMin: 30,
-      category: 'Cortes',
-    ),
-    ServiceItem(
-      id: 's2',
-      name: 'Corte + Barba',
-      description: 'Corte completo más arreglo de barba',
-      price: 35000,
-      durationMin: 45,
-      category: 'Cortes',
-    ),
-    ServiceItem(
-      id: 's3',
-      name: 'Fade Premium',
-      description: 'Degradado profesional con diseño',
-      price: 30000,
-      durationMin: 40,
-      category: 'Cortes',
-    ),
-    ServiceItem(
-      id: 's4',
-      name: 'Perfilado de Barba',
-      description: 'Perfilado y arreglo de barba con navaja',
-      price: 15000,
-      durationMin: 20,
-      category: 'Barba',
-    ),
-    ServiceItem(
-      id: 's5',
-      name: 'Afeitado Clásico',
-      description: 'Afeitado con navaja y toalla caliente',
-      price: 20000,
-      durationMin: 30,
-      category: 'Barba',
-    ),
-  ];
+  List<ServiceItem> _services = const [];
+  List<ProfessionalItem> _professionals = const [];
+  List<ReviewItem> _reviews = const [];
 
-  final List<ProfessionalItem> _professionals = const [
-    ProfessionalItem(id: 'p1', name: 'Carlos M.', specialty: 'Barbero senior'),
-    ProfessionalItem(
-        id: 'p2', name: 'Andrés R.', specialty: 'Especialista en barba'),
-    ProfessionalItem(id: 'p3', name: 'Luis P.', specialty: 'Fade & diseño'),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
 
-  final List<ReviewItem> _reviews = const [
-    ReviewItem(
-      id: 'r1',
-      userName: 'Juan Pérez',
-      rating: 5,
-      comment:
-          'Excelente atención, muy profesional. El mejor corte que me han hecho en Barranquilla.',
-      timeAgo: 'Hace 2 días',
-    ),
-    ReviewItem(
-      id: 'r2',
-      userName: 'Diego M.',
-      rating: 5,
-      comment: 'Muy buen ambiente, precios justos. Carlos es un crack.',
-      timeAgo: 'Hace 1 semana',
-    ),
-    ReviewItem(
-      id: 'r3',
-      userName: 'Andrés G.',
-      rating: 4,
-      comment: 'Buena atención, aunque tuve que esperar un poco.',
-      timeAgo: 'Hace 2 semanas',
-    ),
-  ];
+  Future<void> _loadData() async {
+    try {
+      final establishmentUri = Uri.parse(
+        '${ApiConfig.baseUrl}/establishments/${widget.establishmentId}',
+      );
+      final servicesUri = Uri.parse(
+        '${ApiConfig.baseUrl}/services?establishmentId=${widget.establishmentId}',
+      );
+      final professionalsUri = Uri.parse(
+        '${ApiConfig.baseUrl}/professionals/establishment/${widget.establishmentId}',
+      );
+      final reviewsUri = Uri.parse(
+        '${ApiConfig.baseUrl}/reviews/establishment/${widget.establishmentId}',
+      );
+
+      final responses = await Future.wait([
+        http.get(establishmentUri).timeout(const Duration(seconds: 15)),
+        http.get(servicesUri).timeout(const Duration(seconds: 15)),
+        http.get(professionalsUri).timeout(const Duration(seconds: 15)),
+        http.get(reviewsUri).timeout(const Duration(seconds: 15)),
+      ]);
+
+      final establishmentBody = _decodeBody(responses[0].body);
+      final servicesBody = _decodeBody(responses[1].body);
+      final professionalsBody = _decodeBody(responses[2].body);
+      final reviewsBody = _decodeBody(responses[3].body);
+
+      if (!mounted) return;
+
+      if (responses[0].statusCode != 200 || establishmentBody is! Map<String, dynamic>) {
+        throw Exception(_readMessage(establishmentBody) ?? 'No se pudo cargar la barbería');
+      }
+
+      final establishmentMap = establishmentBody['establishment'];
+      if (establishmentMap is! Map<String, dynamic>) {
+        throw const FormatException('Respuesta de establecimiento inválida');
+      }
+
+      final servicesList = (servicesBody is Map<String, dynamic> ? servicesBody['services'] : null) as List<dynamic>? ?? const [];
+      final professionalsList = (professionalsBody is Map<String, dynamic> ? professionalsBody['professionals'] : null) as List<dynamic>? ?? const [];
+      final reviewsList = (reviewsBody is Map<String, dynamic> ? reviewsBody['reviews'] : null) as List<dynamic>? ?? const [];
+
+      setState(() {
+        _establishment = EstablishmentDetail(
+          id: (establishmentMap['_id'] ?? widget.establishmentId).toString(),
+          name: (establishmentMap['name'] ?? widget.establishmentName ?? 'Barbería').toString(),
+          description: (establishmentMap['description'] ?? 'Sin descripción').toString(),
+          photos: const [],
+          address: (establishmentMap['address'] ?? '').toString(),
+          city: (establishmentMap['city'] ?? '').toString(),
+          phone: (establishmentMap['phone'] ?? widget.establishmentPhone ?? '').toString(),
+          rating: (establishmentMap['rating'] is num ? establishmentMap['rating'] : 0).toDouble(),
+          reviewCount: (establishmentMap['reviewCount'] is num ? establishmentMap['reviewCount'] : reviewsList.length) as int,
+        );
+        _services = servicesList.whereType<Map<String, dynamic>>().map((item) {
+          final rawCategory = item['category'] ?? 'General';
+          return ServiceItem(
+            id: (item['_id'] ?? item['id'] ?? '').toString(),
+            name: (item['name'] ?? 'Servicio').toString(),
+            description: (item['description'] ?? '').toString(),
+            price: (item['price'] is num ? item['price'] : 0).toInt(),
+            durationMin: (item['durationMin'] is num ? item['durationMin'] : 30).toInt(),
+            category: rawCategory.toString(),
+          );
+        }).toList();
+        _professionals = professionalsList.whereType<Map<String, dynamic>>().map((item) {
+          return ProfessionalItem(
+            id: (item['_id'] ?? item['id'] ?? '').toString(),
+            name: (item['name'] ?? 'Profesional').toString(),
+            specialty: (item['specialty'] ?? 'Barbero').toString(),
+          );
+        }).toList();
+        _reviews = reviewsList.whereType<Map<String, dynamic>>().map((item) {
+          final userMap = item['userId'];
+          final userName = userMap is Map<String, dynamic>
+              ? (userMap['name'] ?? 'Usuario').toString()
+              : 'Usuario';
+          return ReviewItem(
+            id: (item['_id'] ?? item['id'] ?? '').toString(),
+            userName: userName,
+            rating: (item['rating'] is num ? item['rating'] : 0).toInt(),
+            comment: (item['comment'] ?? '').toString(),
+            timeAgo: 'Reciente',
+          );
+        }).toList();
+        _isLoading = false;
+        _error = null;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _error = error.toString().replaceFirst('Exception: ', '');
+      });
+    }
+  }
+
+  Map<String, dynamic>? _decodeBody(String body) {
+    try {
+      final decoded = jsonDecode(body);
+      return decoded is Map<String, dynamic> ? decoded : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String? _readMessage(Map<String, dynamic>? body) {
+    final value = body?['message'];
+    return value is String ? value : null;
+  }
+
+  void _goToReservation({String? serviceId, String? serviceName, int? price, int? durationMin}) {
+    if (_services.isEmpty || serviceId == null || serviceId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No hay servicios disponibles para esta barbería.')),
+      );
+      return;
+    }
+
+    final selectedService = _services.firstWhere(
+      (service) => service.id == serviceId,
+      orElse: () => _services.first,
+    );
+
+    context.go(
+      '/client/reservas'
+      '?establishmentId=${_establishment.id}'
+      '&establishmentName=${Uri.encodeComponent(_establishment.name)}'
+      '&serviceId=${selectedService.id}'
+      '&serviceName=${Uri.encodeComponent(selectedService.name)}'
+      '&price=${selectedService.price}'
+      '&durationMin=${selectedService.durationMin}',
+    );
+  }
 
   // ============================================================
   // Utilidades
@@ -223,10 +287,30 @@ class _EstablishmentDetailScreenState
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_error != null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Detalle de barbería')),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text(
+              _error!,
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-          // ---------- AppBar con foto/imagen ----------
           SliverAppBar(
             expandedHeight: 220,
             pinned: true,
@@ -286,7 +370,6 @@ class _EstablishmentDetailScreenState
             ),
           ),
 
-          // ---------- Contenido ----------
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -298,19 +381,15 @@ class _EstablishmentDetailScreenState
                   _buildDescription(theme),
                   const SizedBox(height: 24),
 
-                  // --- Botón Reservar general ---
                   FilledButton.icon(
-                    onPressed: () {
-                      context.go(
-                        '/client/reservas'
-                        '?establishmentId=${_establishment.id}'
-                        '&establishmentName=${Uri.encodeComponent(_establishment.name)}'
-                        '&serviceId=${_services.first.id}'
-                        '&serviceName=${Uri.encodeComponent(_services.first.name)}'
-                        '&price=${_services.first.price}'
-                        '&durationMin=${_services.first.durationMin}',
-                      );
-                    },
+                    onPressed: _services.isEmpty
+                        ? null
+                        : () => _goToReservation(
+                              serviceId: _services.first.id,
+                              serviceName: _services.first.name,
+                              price: _services.first.price,
+                              durationMin: _services.first.durationMin,
+                            ),
                     icon: const Icon(Icons.calendar_month),
                     label: const Text(
                       'RESERVAR CITA',
@@ -321,21 +400,15 @@ class _EstablishmentDetailScreenState
                     ),
                   ),
                   const SizedBox(height: 32),
-
-                  // --- Servicios ---
                   _buildSectionTitle(theme, 'Servicios', Icons.content_cut),
                   const SizedBox(height: 12),
                   _buildServicesList(theme),
                   const SizedBox(height: 32),
-
-                  // --- Profesionales ---
                   _buildSectionTitle(
                       theme, 'Nuestros profesionales', Icons.people_outline),
                   const SizedBox(height: 12),
                   _buildProfessionalsList(theme),
                   const SizedBox(height: 32),
-
-                  // --- Reseñas ---
                   _buildSectionTitle(
                     theme,
                     'Reseñas (${_establishment.reviewCount})',
@@ -344,8 +417,6 @@ class _EstablishmentDetailScreenState
                   const SizedBox(height: 12),
                   _buildReviewsList(theme),
                   const SizedBox(height: 32),
-
-                  // --- Info de contacto ---
                   _buildSectionTitle(theme, 'Contacto', Icons.info_outline),
                   const SizedBox(height: 12),
                   _buildContactInfo(theme),
@@ -507,15 +578,16 @@ class _EstablishmentDetailScreenState
                   ),
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  service.description,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: theme.colorScheme.onSurfaceVariant,
+                if (service.description.isNotEmpty)
+                  Text(
+                    service.description,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
                 const SizedBox(height: 8),
                 Row(
                   children: [
@@ -550,17 +622,12 @@ class _EstablishmentDetailScreenState
               SizedBox(
                 height: 32,
                 child: FilledButton(
-                  onPressed: () {
-                    context.go(
-                      '/client/reservas'
-                      '?establishmentId=${_establishment.id}'
-                      '&establishmentName=${Uri.encodeComponent(_establishment.name)}'
-                      '&serviceId=${service.id}'
-                      '&serviceName=${Uri.encodeComponent(service.name)}'
-                      '&price=${service.price}'
-                      '&durationMin=${service.durationMin}',
-                    );
-                  },
+                  onPressed: () => _goToReservation(
+                    serviceId: service.id,
+                    serviceName: service.name,
+                    price: service.price,
+                    durationMin: service.durationMin,
+                  ),
                   style: FilledButton.styleFrom(
                     padding: const EdgeInsets.symmetric(horizontal: 14),
                     minimumSize: const Size(0, 32),

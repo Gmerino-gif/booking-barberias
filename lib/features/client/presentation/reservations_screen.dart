@@ -1,34 +1,24 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:http/http.dart' as http;
+import 'package:provider/provider.dart';
 
-// ============================================================
-// MODELOS SIMPLES (hardcodeados por ahora, después vienen de Node.js)
-// ============================================================
+import '../../../core/network/api_config.dart';
+import '../../auth/providers/auth_provider.dart';
 
-class BarberService {
-  final String name;
-  final int price;
-  final int durationMin;
-  const BarberService({
-    required this.name,
-    required this.price,
-    required this.durationMin,
-  });
-}
-
-class Professional {
+class ProfessionalOption {
+  final String id;
   final String name;
   final String specialty;
-  final String? avatarUrl;
-  const Professional({
+
+  const ProfessionalOption({
+    required this.id,
     required this.name,
     required this.specialty,
-    this.avatarUrl,
   });
 }
-
-// ============================================================
-// PANTALLA DE RESERVAS
-// ============================================================
 
 class ReservationsScreen extends StatefulWidget {
   final String establishmentId;
@@ -53,21 +43,11 @@ class ReservationsScreen extends StatefulWidget {
 }
 
 class _ReservationsScreenState extends State<ReservationsScreen> {
-  // --- Datos que vienen del detalle de la barbería ---
-  BarberService get _service => BarberService(
-        name: widget.serviceName,
-        price: widget.servicePrice,
-        durationMin: widget.serviceDurationMin,
-      );
+  bool _isLoading = true;
+  bool _isSubmitting = false;
+  String? _error;
 
-  final List<Professional> _professionals = const [
-    Professional(name: 'Cualquiera', specialty: 'Primer disponible'),
-    Professional(name: 'Carlos M.', specialty: 'Barbero senior'),
-    Professional(name: 'Andrés R.', specialty: 'Especialista en barba'),
-    Professional(name: 'Luis P.', specialty: 'Fade & diseño'),
-  ];
-
-  // Horas disponibles (hardcodeado, después viene del backend)
+  List<ProfessionalOption> _professionals = const [];
   final List<String> _availableHours = const [
     '09:00 AM',
     '10:00 AM',
@@ -80,82 +60,193 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     '05:30 PM',
   ];
 
-  // --- Estado de la selección ---
-  DateTime _selectedDate = DateTime.now();
+  DateTime _selectedDate = DateTime.now().add(const Duration(days: 1));
   String? _selectedHour;
   int _selectedProfessionalIndex = 0;
 
-  // --- Utilidades ---
-  static const _weekdays = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
-  static const _months = [
-    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
-  ];
-  static const _monthsShort = [
-    'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
-    'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic',
-  ];
-
-  String _formatDayLabel(DateTime d) {
-    if (_isToday(d)) return 'Hoy';
-    if (_isTomorrow(d)) return 'Mañana';
-    return '${_weekdays[d.weekday - 1]}, ${d.day} de ${_months[d.month - 1]}';
+  @override
+  void initState() {
+    super.initState();
+    _loadProfessionals();
   }
 
-  String _formatFullDate(DateTime d) {
-    return '${_weekdays[d.weekday - 1]} ${d.day} ${_monthsShort[d.month - 1]} ${d.year}';
-  }
+  Future<void> _loadProfessionals() async {
+    try {
+      final auth = context.read<AuthProvider>();
+      final response = await http
+          .get(
+            Uri.parse(
+              '${ApiConfig.baseUrl}/professionals/establishment/${widget.establishmentId}',
+            ),
+            headers: {
+              if (auth.accessToken != null && auth.accessToken!.isNotEmpty)
+                'Authorization': 'Bearer ${auth.accessToken}',
+              'Content-Type': 'application/json; charset=UTF-8',
+            },
+          )
+          .timeout(const Duration(seconds: 15));
 
-  bool _isToday(DateTime d) {
-    final now = DateTime.now();
-    return d.day == now.day && d.month == now.month && d.year == now.year;
-  }
+      if (!mounted) return;
 
-  bool _isTomorrow(DateTime d) {
-    final tomorrow = DateTime.now().add(const Duration(days: 1));
-    return d.day == tomorrow.day &&
-        d.month == tomorrow.month &&
-        d.year == tomorrow.year;
-  }
+      if (response.statusCode != 200) {
+        final decoded = jsonDecode(response.body);
+        final message = decoded is Map<String, dynamic> ? decoded['message'] : null;
+        throw Exception(message is String ? message : 'No se pudieron cargar los profesionales');
+      }
 
-  String _formatPrice(int value) {
-    final str = value.toString();
-    final buf = StringBuffer();
-    for (int i = 0; i < str.length; i++) {
-      if (i > 0 && (str.length - i) % 3 == 0) buf.write('.');
-      buf.write(str[i]);
+      final decoded = jsonDecode(response.body);
+      final rawList = decoded is Map<String, dynamic> ? decoded['professionals'] : null;
+      final items = rawList is List ? rawList : const <dynamic>[];
+
+      final professionals = items.whereType<Map<String, dynamic>>().map((item) {
+        return ProfessionalOption(
+          id: (item['_id'] ?? item['id'] ?? '').toString(),
+          name: (item['name'] ?? 'Profesional').toString(),
+          specialty: (item['specialty'] ?? 'Barbero').toString(),
+        );
+      }).toList();
+
+      setState(() {
+        _professionals = professionals;
+        _isLoading = false;
+        _error = professionals.isEmpty ? 'No hay profesionales disponibles para esta barberÃ­a' : null;
+        if (_professionals.isNotEmpty) {
+          _selectedProfessionalIndex = 0;
+        }
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _error = error.toString().replaceFirst('Exception: ', '');
+      });
     }
-    return '\$${buf.toString()}';
   }
 
-  // ============================================================
-  // CALENDARIO PROFESIONAL
-  // ============================================================
+  Future<void> _confirmReservation() async {
+    if (_selectedHour == null || _professionals.isEmpty) return;
+
+    final auth = context.read<AuthProvider>();
+    final token = auth.accessToken;
+    if (token == null || token.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Debes iniciar sesiÃ³n para reservar')),
+      );
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+
+    try {
+      final startAt = _buildSelectedDateTime();
+      final professional = _professionals[_selectedProfessionalIndex];
+      final response = await http
+          .post(
+            Uri.parse('${ApiConfig.baseUrl}/bookings'),
+            headers: {
+              'Content-Type': 'application/json; charset=UTF-8',
+              'Authorization': 'Bearer ${auth.accessToken}',
+            },
+            body: jsonEncode({
+              'establishmentId': widget.establishmentId,
+              'professionalId': professional.id,
+              'serviceId': widget.serviceId,
+              'startAt': startAt.toIso8601String(),
+              'notes': '',
+            }),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      if (!mounted) return;
+
+      final decoded = jsonDecode(response.body);
+      if (response.statusCode != 200 && response.statusCode != 201) {
+        final message = decoded is Map<String, dynamic> ? decoded['message'] : null;
+        throw Exception(message is String ? message : 'No se pudo crear la reserva');
+      }
+
+      await showDialog<void>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.green, size: 28),
+              SizedBox(width: 8),
+              Text('Â¡Reserva creada!'),
+            ],
+          ),
+          content: Text(
+            'Tu cita para ${widget.serviceName} quedÃ³ agendada con ${professional.name}.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                context.go('/client/my-bookings');
+              },
+              child: const Text('Ver reservas'),
+            ),
+          ],
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.toString().replaceFirst('Exception: ', '')),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
+  }
+
+  DateTime _buildSelectedDateTime() {
+    if (_selectedHour == null || _selectedHour!.isEmpty) {
+      return DateTime(
+        _selectedDate.year,
+        _selectedDate.month,
+        _selectedDate.day,
+        10,
+        0,
+      );
+    }
+
+    final parts = _selectedHour!.split(RegExp(r'\s+'));
+    final time = parts.first;
+    final meridiem = parts.length > 1 ? parts[1].toUpperCase() : 'AM';
+    final hourMinute = time.split(':');
+    var hour = int.parse(hourMinute[0]);
+    final minute = int.parse(hourMinute[1]);
+
+    if (meridiem == 'PM' && hour != 12) {
+      hour += 12;
+    }
+    if (meridiem == 'AM' && hour == 12) {
+      hour = 0;
+    }
+
+    return DateTime(
+      _selectedDate.year,
+      _selectedDate.month,
+      _selectedDate.day,
+      hour,
+      minute,
+    );
+  }
+
   Future<void> _pickDate() async {
     final now = DateTime.now();
-    final lastDate = now.add(const Duration(days: 90));
-
     final picked = await showDatePicker(
       context: context,
       initialDate: _selectedDate,
       firstDate: now,
-      lastDate: lastDate,
+      lastDate: now.add(const Duration(days: 90)),
       helpText: 'Selecciona la fecha de tu cita',
       cancelText: 'Cancelar',
       confirmText: 'Aceptar',
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.light(
-              primary: Theme.of(context).colorScheme.primary,
-              onPrimary: Colors.white,
-              surface: Colors.white,
-              onSurface: Colors.black,
-            ),
-          ),
-          child: child!,
-        );
-      },
     );
 
     if (picked != null) {
@@ -166,125 +257,110 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     }
   }
 
-  // --- Confirmar ---
-  void _confirmReservation() {
-    if (_selectedHour == null) return;
+  static const _weekdays = ['Lun', 'Mar', 'MiÃ©', 'Jue', 'Vie', 'SÃ¡b', 'Dom'];
+  static const _months = [
+    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+  ];
+  static const _monthsShort = [
+    'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
+    'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic',
+  ];
 
-    final day = _selectedDate;
-    final prof = _professionals[_selectedProfessionalIndex];
-
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        title: const Row(
-          children: [
-            Icon(Icons.check_circle, color: Colors.green, size: 28),
-            SizedBox(width: 8),
-            Text('¡Reserva confirmada!'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildSummaryRow(Icons.content_cut, _service.name),
-            const SizedBox(height: 8),
-            _buildSummaryRow(Icons.person_outline, prof.name),
-            const SizedBox(height: 8),
-            _buildSummaryRow(Icons.calendar_today,
-                '${_formatFullDate(day)} · $_selectedHour'),
-            const SizedBox(height: 8),
-            _buildSummaryRow(Icons.attach_money,
-                _formatPrice(_service.price)),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              setState(() {
-                _selectedHour = null;
-                _selectedDate = DateTime.now();
-                _selectedProfessionalIndex = 0;
-              });
-            },
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
+  String _formatDayLabel(DateTime date) {
+    final now = DateTime.now();
+    if (date.year == now.year && date.month == now.month && date.day == now.day) {
+      return 'Hoy';
+    }
+    final tomorrow = now.add(const Duration(days: 1));
+    if (date.year == tomorrow.year && date.month == tomorrow.month && date.day == tomorrow.day) {
+      return 'MaÃ±ana';
+    }
+    return '${_weekdays[date.weekday - 1]}, ${date.day} de ${_months[date.month - 1]}';
   }
 
-  Widget _buildSummaryRow(IconData icon, String text) {
-    return Row(
-      children: [
-        Icon(icon, size: 18, color: Colors.grey.shade600),
-        const SizedBox(width: 8),
-        Expanded(child: Text(text, style: const TextStyle(fontSize: 14))),
-      ],
-    );
+  String _formatFullDate(DateTime date) {
+    return '${_weekdays[date.weekday - 1]} ${date.day} ${_monthsShort[date.month - 1]} ${date.year}';
   }
 
-  // ============================================================
-  // BUILD
-  // ============================================================
+  String _formatPrice(int value) {
+    final raw = value.toString();
+    final buffer = StringBuffer();
+    for (var index = 0; index < raw.length; index++) {
+      if (index > 0 && (raw.length - index) % 3 == 0) {
+        buffer.write('.');
+      }
+      buffer.write(raw[index]);
+    }
+    return '\$${buffer.toString()}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final canConfirm = _selectedHour != null;
+    final selectedProfessional = _professionals.isNotEmpty && _selectedProfessionalIndex < _professionals.length
+        ? _professionals[_selectedProfessionalIndex]
+        : null;
+    final canConfirm = _selectedHour != null && !_isSubmitting && _professionals.isNotEmpty;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ---------- Info del servicio ----------
-          _buildServiceCard(theme),
-          const SizedBox(height: 24),
+    if (_isLoading) {
+      return Scaffold(
+        appBar: AppBar(title: Text(widget.establishmentName)),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
 
-          // ---------- PASO 1: Día (calendario) ----------
-          _buildStepTitle('1', 'Elige el día'),
-          const SizedBox(height: 12),
-          _buildDateSelectorCard(theme),
-          const SizedBox(height: 24),
+    if (_error != null) {
+      return Scaffold(
+        appBar: AppBar(title: Text(widget.establishmentName)),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text(_error!, textAlign: TextAlign.center),
+          ),
+        ),
+      );
+    }
 
-          // ---------- PASO 2: Hora ----------
-          _buildStepTitle('2', 'Elige la hora'),
-          const SizedBox(height: 12),
-          _buildHoursSelector(theme),
-          const SizedBox(height: 24),
-
-          // ---------- PASO 3: Profesional ----------
-          _buildStepTitle('3', 'Elige el profesional'),
-          const SizedBox(height: 12),
-          _buildProfessionalsSelector(theme),
-          const SizedBox(height: 24),
-
-          // ---------- Resumen ----------
-          _buildSummaryCard(theme),
-          const SizedBox(height: 16),
-
-          // ---------- Botón confirmar ----------
-          FilledButton(
-            onPressed: canConfirm ? _confirmReservation : null,
-            child: Text(
-              canConfirm ? 'CONFIRMAR RESERVA' : 'ELIGE UNA HORA',
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.5,
+    return Scaffold(
+      appBar: AppBar(title: Text(widget.establishmentName)),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildServiceCard(theme),
+            const SizedBox(height: 24),
+            _buildStepTitle('1', 'Elige el dÃ­a'),
+            const SizedBox(height: 12),
+            _buildDateSelectorCard(theme),
+            const SizedBox(height: 24),
+            _buildStepTitle('2', 'Elige la hora'),
+            const SizedBox(height: 12),
+            _buildHoursSelector(theme),
+            const SizedBox(height: 24),
+            _buildStepTitle('3', 'Elige el profesional'),
+            const SizedBox(height: 12),
+            _buildProfessionalsSelector(theme),
+            const SizedBox(height: 24),
+            _buildSummaryCard(theme, selectedProfessional),
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: canConfirm ? _confirmReservation : null,
+              child: Text(
+                _isSubmitting ? 'CONFIRMANDO...' : 'CONFIRMAR RESERVA',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.5,
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 24),
-        ],
+            const SizedBox(height: 24),
+          ],
+        ),
       ),
     );
   }
-
-  // ---------- Widgets auxiliares ----------
 
   Widget _buildStepTitle(String number, String title) {
     return Row(
@@ -343,7 +419,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '${_service.name} · ${_formatPrice(_service.price)}',
+                  '${widget.serviceName} Â· ${_formatPrice(widget.servicePrice)}',
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.85),
                     fontSize: 13,
@@ -359,7 +435,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
-              '${_service.durationMin} min',
+              '${widget.serviceDurationMin} min',
               style: const TextStyle(
                 color: Colors.black,
                 fontSize: 12,
@@ -372,9 +448,6 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     );
   }
 
-  // ============================================================
-  // SELECTOR DE FECHA (tarjeta que abre el calendario)
-  // ============================================================
   Widget _buildDateSelectorCard(ThemeData theme) {
     return InkWell(
       onTap: _pickDate,
@@ -462,9 +535,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
               hour,
               style: TextStyle(
                 fontWeight: FontWeight.w600,
-                color: selected
-                    ? Colors.black
-                    : theme.colorScheme.onSurface,
+                color: selected ? Colors.black : theme.colorScheme.onSurface,
               ),
             ),
           ),
@@ -480,11 +551,11 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
         scrollDirection: Axis.horizontal,
         itemCount: _professionals.length,
         separatorBuilder: (_, _) => const SizedBox(width: 10),
-        itemBuilder: (context, i) {
-          final prof = _professionals[i];
-          final selected = i == _selectedProfessionalIndex;
+        itemBuilder: (context, index) {
+          final professional = _professionals[index];
+          final selected = index == _selectedProfessionalIndex;
           return GestureDetector(
-            onTap: () => setState(() => _selectedProfessionalIndex = i),
+            onTap: () => setState(() => _selectedProfessionalIndex = index),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 180),
               width: 150,
@@ -508,7 +579,9 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                         ? theme.colorScheme.secondary
                         : theme.colorScheme.primary,
                     child: Text(
-                      prof.name.substring(0, 1),
+                      professional.name.isNotEmpty
+                          ? professional.name.substring(0, 1).toUpperCase()
+                          : '?',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         color: selected ? Colors.black : Colors.white,
@@ -517,7 +590,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    prof.name,
+                    professional.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
@@ -527,7 +600,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                     ),
                   ),
                   Text(
-                    prof.specialty,
+                    professional.specialty,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
@@ -544,10 +617,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     );
   }
 
-  Widget _buildSummaryCard(ThemeData theme) {
-    final day = _selectedDate;
-    final prof = _professionals[_selectedProfessionalIndex];
-
+  Widget _buildSummaryCard(ThemeData theme, ProfessionalOption? selectedProfessional) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -568,25 +638,16 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          _buildSummaryRow(
-            Icons.calendar_today,
-            _formatFullDate(day),
-          ),
+          _buildSummaryRow(Icons.calendar_today, _formatFullDate(_selectedDate)),
           const SizedBox(height: 8),
-          _buildSummaryRow(
-            Icons.access_time,
-            _selectedHour ?? 'Sin hora seleccionada',
-          ),
+          _buildSummaryRow(Icons.access_time, _selectedHour ?? 'Sin hora seleccionada'),
           const SizedBox(height: 8),
           _buildSummaryRow(
             Icons.person_outline,
-            prof.name,
+            selectedProfessional?.name ?? 'Sin profesional',
           ),
           const SizedBox(height: 8),
-          _buildSummaryRow(
-            Icons.timer_outlined,
-            '${_service.durationMin} min',
-          ),
+          _buildSummaryRow(Icons.timer_outlined, '${widget.serviceDurationMin} min'),
           const Divider(height: 24),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -599,7 +660,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                 ),
               ),
               Text(
-                _formatPrice(_service.price),
+                _formatPrice(widget.servicePrice),
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -610,6 +671,16 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildSummaryRow(IconData icon, String text) {
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: Colors.grey.shade600),
+        const SizedBox(width: 8),
+        Expanded(child: Text(text, style: const TextStyle(fontSize: 14))),
+      ],
     );
   }
 }

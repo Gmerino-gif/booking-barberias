@@ -1,5 +1,6 @@
 import type { Response } from 'express';
 import { Booking } from '../models/Booking.js';
+import { Establishment } from '../models/Establishment.js';
 import { Service } from '../models/Service.js';
 import type { AuthenticatedRequest } from '../middleware/auth.middleware.js';
 
@@ -61,6 +62,24 @@ export const createBooking = async (req: AuthenticatedRequest, res: Response): P
   }
 };
 
+const serializeBooking = (booking: any) => ({
+  id: booking._id?.toString?.() ?? booking.id,
+  clientId: booking.clientId?._id?.toString?.() ?? booking.clientId ?? null,
+  establishmentId: booking.establishmentId?._id?.toString?.() ?? booking.establishmentId ?? null,
+  professionalId: booking.professionalId?._id?.toString?.() ?? booking.professionalId ?? null,
+  serviceId: booking.serviceId?._id?.toString?.() ?? booking.serviceId ?? null,
+  establishmentName: booking.establishmentId?.name ?? null,
+  clientName: booking.clientId?.name ?? null,
+  professionalName: booking.professionalId?.name ?? null,
+  serviceName: booking.serviceId?.name ?? null,
+  durationMin: booking.serviceId?.durationMin ?? booking.durationMin ?? null,
+  price: booking.price ?? booking.serviceId?.price ?? null,
+  status: booking.status,
+  startAt: booking.startAt,
+  endAt: booking.endAt,
+  notes: booking.notes ?? '',
+});
+
 export const getMyBookings = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const bookings = await Booking.find({ clientId: req.user!.id })
@@ -70,8 +89,29 @@ export const getMyBookings = async (req: AuthenticatedRequest, res: Response): P
       .populate('serviceId', 'name durationMin price')
       .sort({ startAt: -1 });
 
-    res.status(200).json({ bookings });
+    res.status(200).json({ bookings: bookings.map((booking) => serializeBooking(booking.toObject())) });
   } catch {
     res.status(500).json({ message: 'Error al obtener tus reservas' });
+  }
+};
+
+export const getBusinessBookings = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const establishment = await Establishment.findOne({ ownerId: req.user!.id });
+    if (!establishment) {
+      res.status(404).json({ message: 'No tienes un establecimiento registrado' });
+      return;
+    }
+
+    const bookings = await Booking.find({ establishmentId: establishment._id })
+      .populate('establishmentId', 'name address phone')
+      .populate('clientId', 'name phone')
+      .populate('professionalId', 'name')
+      .populate('serviceId', 'name durationMin price')
+      .sort({ startAt: -1 });
+
+    res.status(200).json({ bookings: bookings.map((booking) => serializeBooking(booking.toObject())) });
+  } catch {
+    res.status(500).json({ message: 'Error al obtener las reservas del negocio' });
   }
 };
