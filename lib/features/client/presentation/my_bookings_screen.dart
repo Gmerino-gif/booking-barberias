@@ -64,7 +64,7 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _error = 'Inicia sesiÃ³n para ver tus reservas';
+        _error = 'Inicia sesión para ver tus reservas';
       });
       return;
     }
@@ -125,8 +125,8 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
     return BookingModel(
       id: (map['_id'] ?? map['id'] ?? '').toString(),
       establishmentName: (establishment is Map<String, dynamic>
-              ? (establishment['name'] ?? map['establishmentName'] ?? 'BarberÃ­a')
-              : (map['establishmentName'] ?? 'BarberÃ­a'))
+              ? (establishment['name'] ?? map['establishmentName'] ?? 'Barbería')
+              : (map['establishmentName'] ?? 'Barbería'))
           .toString(),
       serviceName: (service is Map<String, dynamic>
               ? (service['name'] ?? map['serviceName'] ?? 'Servicio')
@@ -172,7 +172,7 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
     return history;
   }
 
-  static const _weekdays = ['Lun', 'Mar', 'MiÃ©', 'Jue', 'Vie', 'SÃ¡b', 'Dom'];
+  static const _weekdays = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
   static const _months = [
     'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
     'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic',
@@ -211,7 +211,7 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
       case 'cancelled':
         return (color: Colors.red, label: 'Cancelada', icon: Icons.cancel);
       case 'no_show':
-        return (color: Colors.grey, label: 'No asistiÃ³', icon: Icons.person_off);
+        return (color: Colors.grey, label: 'No asistió', icon: Icons.person_off);
       default:
         return (color: Colors.grey, label: status, icon: Icons.info);
     }
@@ -247,7 +247,7 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
             indicatorColor: theme.colorScheme.secondary,
             indicatorWeight: 3,
             tabs: const [
-              Tab(text: 'PrÃ³ximas'),
+              Tab(text: 'Próximas'),
               Tab(text: 'Historial'),
             ],
           ),
@@ -290,14 +290,14 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
           ),
           const SizedBox(height: 16),
           Text(
-            isUpcoming ? 'No tienes reservas prÃ³ximas' : 'AÃºn no tienes historial',
+            isUpcoming ? 'No tienes reservas próximas' : 'Aún no tienes historial',
             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 6),
           Text(
             isUpcoming
-                ? 'Cuando reserves una cita aparecerÃ¡ aquÃ­'
-                : 'Tus reservas anteriores aparecerÃ¡n aquÃ­',
+                ? 'Cuando reserves una cita aparecerá aquí'
+                : 'Tus reservas anteriores aparecerán aquí',
             style: TextStyle(
               fontSize: 13,
               color: theme.colorScheme.onSurfaceVariant,
@@ -388,7 +388,7 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
                 _buildInfoRow(
                   theme,
                   Icons.calendar_today,
-                  '${_formatDate(booking.startAt)} Â· ${_formatTime(booking.startAt)}',
+                  '${_formatDate(booking.startAt)} · ${_formatTime(booking.startAt)}',
                 ),
                 const SizedBox(height: 6),
                 _buildInfoRow(
@@ -444,7 +444,7 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
                       OutlinedButton(
                         onPressed: () {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Cancelar reserva (prÃ³ximamente)')),
+                            const SnackBar(content: Text('Cancelar reserva (próximamente)')),
                           );
                         },
                         style: OutlinedButton.styleFrom(

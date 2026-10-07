@@ -70,7 +70,7 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _error = 'Inicia sesiÃƒÂ³n para ver el panel del negocio';
+        _error = 'Inicia sesión para ver el panel del negocio';
       });
       return;
     }
@@ -92,7 +92,7 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
           establishment is! Map<String, dynamic>) {
         throw Exception(
           _readMessage(establishmentBody) ??
-              'No se pudo cargar la informaciÃƒÂ³n del negocio',
+              'No se pudo cargar la información del negocio',
         );
       }
 
@@ -233,7 +233,7 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
   }
 
   String _formatDate(DateTime date) {
-    final weekdays = ['Lun', 'Mar', 'MiÃƒÂ©', 'Jue', 'Vie', 'SÃƒÂ¡b', 'Dom'];
+    final weekdays = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
     final months = [
       'Ene',
       'Feb',
@@ -296,7 +296,7 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
       case 'cancelled':
         return (color: Colors.red, label: 'Cancelada');
       case 'no_show':
-        return (color: Colors.grey, label: 'No asistiÃƒÂ³');
+        return (color: Colors.grey, label: 'No asistió');
       default:
         return (color: Colors.grey, label: status);
     }
@@ -325,7 +325,7 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
       padding: const EdgeInsets.all(16),
       children: [
         Text(
-          'Hola, $_businessName Ã°Å¸â€˜â€¹',
+          'Hola, $_businessName 👋',
           style: Theme.of(context).textTheme.headlineSmall,
         ),
         const SizedBox(height: 4),
@@ -363,7 +363,7 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
             const SizedBox(width: 12),
             Expanded(
               child: _KpiCard(
-                title: 'PrÃƒÂ³xima cita',
+                title: 'Próxima cita',
                 value: nextBooking == null
                     ? 'Sin citas'
                     : _formatTime(nextBooking),
@@ -374,7 +374,7 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
         ),
         const SizedBox(height: 24),
         const Text(
-          'PrÃƒÂ³ximas reservas',
+          'Próximas reservas',
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
         ),
         const SizedBox(height: 8),
@@ -382,7 +382,7 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
           const Card(
             child: Padding(
               padding: EdgeInsets.all(16),
-              child: Text('No tienes reservas prÃƒÂ³ximas en este momento.'),
+              child: Text('No tienes reservas próximas en este momento.'),
             ),
           )
         else
@@ -397,7 +397,7 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
                 ),
                 title: Text(booking.clientName),
                 subtitle: Text(
-                  '${booking.serviceName} Ã‚Â· ${booking.professionalName} Ã‚Â· ${_formatDate(booking.startAt)} ${_formatTime(booking.startAt)}',
+                  '${booking.serviceName} · ${booking.professionalName} · ${_formatDate(booking.startAt)} ${_formatTime(booking.startAt)}',
                 ),
                 trailing: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -444,7 +444,7 @@ class _BusinessAgendaScreenState extends State<BusinessAgendaScreen> {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _error = 'Inicia sesiÃƒÂ³n para ver tu agenda';
+        _error = 'Inicia sesión para ver tu agenda';
       });
       return;
     }
@@ -534,7 +534,7 @@ class _BusinessAgendaScreenState extends State<BusinessAgendaScreen> {
   }
 
   String _formatDate(DateTime date) {
-    final weekdays = ['Lun', 'Mar', 'MiÃƒÂ©', 'Jue', 'Vie', 'SÃƒÂ¡b', 'Dom'];
+    final weekdays = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
     final months = [
       'Ene',
       'Feb',
@@ -569,7 +569,7 @@ class _BusinessAgendaScreenState extends State<BusinessAgendaScreen> {
       case 'cancelled':
         return (color: Colors.red, label: 'Cancelada');
       case 'no_show':
-        return (color: Colors.grey, label: 'No asistiÃƒÂ³');
+        return (color: Colors.grey, label: 'No asistió');
       default:
         return (color: Colors.grey, label: status);
     }
@@ -611,7 +611,7 @@ class _BusinessAgendaScreenState extends State<BusinessAgendaScreen> {
           const Card(
             child: Padding(
               padding: EdgeInsets.all(16),
-              child: Text('No hay citas agendadas todavÃƒÂ­a.'),
+              child: Text('No hay citas agendadas todavía.'),
             ),
           )
         else
@@ -669,7 +669,7 @@ class _BusinessAgendaScreenState extends State<BusinessAgendaScreen> {
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    '${booking.serviceName} Ã‚Â· ${booking.professionalName}',
+                                    '${booking.serviceName} · ${booking.professionalName}',
                                   ),
                                   const SizedBox(height: 4),
                                   Text('${_formatTime(booking.startAt)} hrs'),
@@ -733,7 +733,7 @@ class _BusinessServicesScreenState extends State<BusinessServicesScreen> {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _error = 'Inicia sesiÃƒÂ³n para ver tus servicios';
+        _error = 'Inicia sesión para ver tus servicios';
       });
       return;
     }
@@ -872,7 +872,7 @@ class _BusinessServicesScreenState extends State<BusinessServicesScreen> {
             child: Padding(
               padding: EdgeInsets.all(16),
               child: Text(
-                'AÃƒÂºn no hay servicios registrados para este negocio.',
+                'Aún no hay servicios registrados para este negocio.',
               ),
             ),
           )
@@ -885,7 +885,7 @@ class _BusinessServicesScreenState extends State<BusinessServicesScreen> {
                 title: Text(service.name),
                 subtitle: Text(
                   service.description.isEmpty
-                      ? 'Sin descripciÃƒÂ³n'
+                      ? 'Sin descripción'
                       : service.description,
                 ),
                 trailing: Column(

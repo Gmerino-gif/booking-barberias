@@ -109,7 +109,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
       setState(() {
         _professionals = professionals;
         _isLoading = false;
-        _error = professionals.isEmpty ? 'No hay profesionales disponibles para esta barberÃ­a' : null;
+        _error = professionals.isEmpty ? 'No hay profesionales disponibles para esta barbería' : null;
         if (_professionals.isNotEmpty) {
           _selectedProfessionalIndex = 0;
         }
@@ -130,7 +130,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     final token = auth.accessToken;
     if (token == null || token.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Debes iniciar sesiÃ³n para reservar')),
+        const SnackBar(content: Text('Debes iniciar sesión para reservar')),
       );
       return;
     }
@@ -172,11 +172,11 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
             children: [
               Icon(Icons.check_circle, color: Colors.green, size: 28),
               SizedBox(width: 8),
-              Text('Â¡Reserva creada!'),
+              Text('¡Reserva creada!'),
             ],
           ),
           content: Text(
-            'Tu cita para ${widget.serviceName} quedÃ³ agendada con ${professional.name}.',
+            'Tu cita para ${widget.serviceName} quedó agendada con ${professional.name}.',
           ),
           actions: [
             TextButton(
@@ -257,7 +257,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     }
   }
 
-  static const _weekdays = ['Lun', 'Mar', 'MiÃ©', 'Jue', 'Vie', 'SÃ¡b', 'Dom'];
+  static const _weekdays = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
   static const _months = [
     'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
     'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
@@ -274,7 +274,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     }
     final tomorrow = now.add(const Duration(days: 1));
     if (date.year == tomorrow.year && date.month == tomorrow.month && date.day == tomorrow.day) {
-      return 'MaÃ±ana';
+      return 'Mañana';
     }
     return '${_weekdays[date.weekday - 1]}, ${date.day} de ${_months[date.month - 1]}';
   }
@@ -331,7 +331,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
           children: [
             _buildServiceCard(theme),
             const SizedBox(height: 24),
-            _buildStepTitle('1', 'Elige el dÃ­a'),
+            _buildStepTitle('1', 'Elige el día'),
             const SizedBox(height: 12),
             _buildDateSelectorCard(theme),
             const SizedBox(height: 24),
@@ -419,7 +419,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '${widget.serviceName} Â· ${_formatPrice(widget.servicePrice)}',
+                  '${widget.serviceName} · ${_formatPrice(widget.servicePrice)}',
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.85),
                     fontSize: 13,
