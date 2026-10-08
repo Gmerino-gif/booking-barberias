@@ -1,5 +1,7 @@
 import type { Response } from 'express';
+import { Types } from 'mongoose';
 import { Booking } from '../models/Booking.js';
+import { BookingSlotLock } from '../models/BookingSlotLock.js';
 import { Establishment } from '../models/Establishment.js';
 import { Service } from '../models/Service.js';
 import { Professional } from '../models/Professional.js';
@@ -63,21 +65,75 @@ export const createBooking = async (req: AuthenticatedRequest, res: Response): P
       return;
     }
 
-    const booking = await Booking.create({
-      clientId: req.user!.id,
-      establishmentId,
-      professionalId,
-      serviceId,
-      startAt,
-      endAt,
-      price: service.price,
-      notes: typeof body?.notes === 'string' ? body.notes.trim() : '',
-    });
+    const bookingId = new Types.ObjectId();
+    const intervalMs = 30 * 60 * 1000;
+    const establishment = await Establishment.findById(establishmentId).select('openingMinutes');
+    if (!establishment) {
+      res.status(404).json({ message: 'Establecimiento no encontrado' });
+      return;
+    }
+    const localMidnightUtc = Date.UTC(
+      localStartAt.getUTCFullYear(), localStartAt.getUTCMonth(), localStartAt.getUTCDate(),
+    ) - utcOffsetMinutes * 60_000;
+    const firstOpeningSlotAt = localMidnightUtc + (establishment.openingMinutes ?? 540) * 60_000;
+    const firstSlotAt = firstOpeningSlotAt +
+      Math.floor((startAt.getTime() - firstOpeningSlotAt) / intervalMs) * intervalMs;
+    const slots = [];
+    const lockExpiresAt = new Date(Date.now() + 2 * 60 * 1000);
+    for (let slotAt = firstSlotAt; slotAt < endAt.getTime(); slotAt += intervalMs) {
+      slots.push({ bookingId, professionalId, slotStartAt: new Date(slotAt), expiresAt: lockExpiresAt });
+    }
+
+    try {
+      await BookingSlotLock.init();
+      await BookingSlotLock.deleteMany({
+        professionalId,
+        slotStartAt: { $in: slots.map((slot) => slot.slotStartAt) },
+        expiresAt: { $lte: new Date() },
+      });
+      await BookingSlotLock.insertMany(slots, { ordered: true });
+    } catch (error) {
+      await BookingSlotLock.deleteMany({ bookingId });
+      if (isDuplicateKeyError(error)) {
+        res.status(409).json({ message: 'El horario seleccionado ya no está disponible' });
+        return;
+      }
+      throw error;
+    }
+
+    let booking;
+    try {
+      booking = await Booking.create({
+        _id: bookingId,
+        clientId: req.user!.id,
+        establishmentId,
+        professionalId,
+        serviceId,
+        startAt,
+        endAt,
+        price: service.price,
+        notes: typeof body?.notes === 'string' ? body.notes.trim() : '',
+      });
+      try {
+        await BookingSlotLock.updateMany({ bookingId }, { $unset: { expiresAt: 1 } });
+      } catch {
+        console.error('No se pudo actualizar la retención de los intervalos de reserva');
+      }
+    } catch (error) {
+      await BookingSlotLock.deleteMany({ bookingId });
+      throw error;
+    }
 
     res.status(201).json({ message: 'Reserva creada exitosamente', booking });
   } catch {
     res.status(500).json({ message: 'Error interno al procesar la reserva' });
   }
+};
+
+const isDuplicateKeyError = (error: unknown): boolean => {
+  if (typeof error !== 'object' || error === null) return false;
+  const candidate = error as { code?: number; writeErrors?: Array<{ code?: number }> };
+  return candidate.code === 11000 || candidate.writeErrors?.some((item) => item.code === 11000) === true;
 };
 
 export const getAvailability = async (req: import('express').Request, res: Response): Promise<void> => {
@@ -151,6 +207,9 @@ export const updateBookingStatus = async (req: AuthenticatedRequest, res: Respon
 
     booking.status = nextStatus as typeof booking.status;
     await booking.save();
+    if (['completed', 'cancelled', 'no_show'].includes(nextStatus)) {
+      await BookingSlotLock.deleteMany({ bookingId: booking._id });
+    }
     res.status(200).json({ message: 'Reserva actualizada', booking: serializeBooking(booking) });
   } catch {
     res.status(500).json({ message: 'No se pudo actualizar la reserva' });

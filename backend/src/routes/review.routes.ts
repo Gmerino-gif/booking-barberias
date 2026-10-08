@@ -6,6 +6,7 @@ import {
   deleteReview,
 } from '../controllers/review.controller.js';
 import { authenticate } from '../middleware/auth.middleware.js';
+import { requireRole } from '../middleware/role.middleware.js';
 
 const router = Router();
 
@@ -14,7 +15,7 @@ router.get('/establishment/:establishmentId', getEstablishmentReviews);
 router.get('/my', authenticate, getMyReviews);
 
 // Rutas protegidas (requieren autenticación para publicar o eliminar reseñas)
-router.post('/', authenticate, createReview);
+router.post('/', authenticate, requireRole(['client']), createReview);
 router.delete('/:id', authenticate, deleteReview);
 
 export default router;

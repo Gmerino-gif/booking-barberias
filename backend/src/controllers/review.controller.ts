@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { Review } from '../models/Review.js';
 import { Establishment } from '../models/Establishment.js';
+import { Booking } from '../models/Booking.js';
 import type { AuthenticatedRequest } from '../middleware/auth.middleware.js';
 
 export const getEstablishmentReviews = async (req: Request, res: Response): Promise<void> => {
@@ -34,12 +35,32 @@ export const createReview = async (req: AuthenticatedRequest, res: Response): Pr
   const rating = Number(body?.rating);
   const comment = typeof body?.comment === 'string' ? body.comment.trim() : '';
 
-  if (!establishmentId || isNaN(rating) || rating < 1 || rating > 5) {
+  if (!establishmentId || !Number.isInteger(rating) || rating < 1 || rating > 5 || comment.length > 500) {
     res.status(400).json({ message: 'El establecimiento y una calificación válida (1-5) son requeridos' });
     return;
   }
 
   try {
+    const establishment = await Establishment.findById(establishmentId).select('_id');
+    if (!establishment) {
+      res.status(404).json({ message: 'Establecimiento no encontrado' });
+      return;
+    }
+    const completedBooking = await Booking.exists({
+      clientId: req.user!.id,
+      establishmentId,
+      status: 'completed',
+      endAt: { $lte: new Date() },
+    });
+    if (!completedBooking) {
+      res.status(403).json({ message: 'Solo puedes reseñar un establecimiento después de completar una cita allí' });
+      return;
+    }
+    if (await Review.exists({ userId: req.user!.id, establishmentId })) {
+      res.status(409).json({ message: 'Ya publicaste una reseña para este establecimiento' });
+      return;
+    }
+
     const review = await Review.create({
       userId: req.user!.id,
       establishmentId,

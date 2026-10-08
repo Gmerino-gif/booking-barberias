@@ -11,7 +11,19 @@ import serviceRoutes from './routes/service.routes.js';
 
 const app = express();
 
-app.use(cors());
+app.use(cors({
+  origin: (origin, callback) => {
+    const corsOrigins = (process.env.CORS_ORIGINS ?? '')
+      .split(',')
+      .map((allowedOrigin) => allowedOrigin.trim())
+      .filter(Boolean);
+    if (!origin || (process.env.NODE_ENV !== 'production' && corsOrigins.length === 0) || corsOrigins.includes(origin)) {
+      callback(null, true);
+      return;
+    }
+    callback(null, false);
+  },
+}));
 app.use(express.json());
 
 // Endpoint de verificación (Healthcheck)

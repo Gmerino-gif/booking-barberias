@@ -154,6 +154,15 @@ export const createEstablishment = async (req: AuthenticatedRequest, res: Respon
   }
 
   try {
+    const existingEstablishment = await Establishment.findOne({ ownerId: req.user!.id });
+    if (existingEstablishment) {
+      res.status(200).json({
+        message: 'El establecimiento ya estaba registrado',
+        establishment: serializeEstablishment(existingEstablishment.toObject()),
+      });
+      return;
+    }
+
     const establishment = await Establishment.create({
       ownerId: req.user!.id,
       name,
@@ -212,7 +221,7 @@ export const updateMyEstablishment = async (req: AuthenticatedRequest, res: Resp
           closingMinutes,
         },
       },
-      { new: true, runValidators: true },
+      { returnDocument: 'after', runValidators: true },
     );
 
     if (!updated) {

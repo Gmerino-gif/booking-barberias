@@ -10,7 +10,11 @@ export interface AuthTokenPayload extends JwtPayload {
 }
 
 export const assertJwtSecret = (): void => {
-  if (!process.env.JWT_SECRET) {
+  if (
+    !process.env.JWT_SECRET ||
+    Buffer.byteLength(process.env.JWT_SECRET, 'utf8') < 32 ||
+    /replace-with|generate-a-random|your[-_ ]|change[-_ ]/i.test(process.env.JWT_SECRET)
+  ) {
     throw new Error('JWT_SECRET no está configurado');
   }
 };

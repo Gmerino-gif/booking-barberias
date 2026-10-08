@@ -794,6 +794,7 @@ class BusinessServicesScreen extends StatefulWidget {
 class _BusinessServicesScreenState extends State<BusinessServicesScreen> {
   bool _isLoading = true;
   String? _error;
+  String? _establishmentId;
   List<_ServiceSummary> _services = const [];
 
   @override
@@ -859,6 +860,7 @@ class _BusinessServicesScreenState extends State<BusinessServicesScreen> {
 
       if (!mounted) return;
       setState(() {
+        _establishmentId = establishmentId;
         _services = items
             .whereType<Map<String, dynamic>>()
             .map(_mapService)
@@ -917,6 +919,105 @@ class _BusinessServicesScreenState extends State<BusinessServicesScreen> {
     return '\$${buffer.toString()}';
   }
 
+  Future<void> _editService([_ServiceSummary? service]) async {
+    final nameController = TextEditingController(text: service?.name ?? '');
+    final descriptionController = TextEditingController(text: service?.description ?? '');
+    final priceController = TextEditingController(text: service?.price.toString() ?? '');
+    final durationController = TextEditingController(text: service?.durationMin.toString() ?? '30');
+    final formKey = GlobalKey<FormState>();
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(service == null ? 'Agregar servicio' : 'Editar servicio'),
+        content: Form(
+          key: formKey,
+          child: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              TextFormField(controller: nameController, maxLength: 100, decoration: const InputDecoration(labelText: 'Nombre'), validator: (v) => (v?.trim().length ?? 0) < 2 ? 'Ingresa un nombre' : null),
+              TextFormField(controller: descriptionController, maxLength: 500, decoration: const InputDecoration(labelText: 'Descripción')),
+              TextFormField(controller: priceController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Precio (COP)'), validator: (v) => (int.tryParse(v ?? '') ?? -1) < 0 ? 'Ingresa un precio válido' : null),
+              TextFormField(controller: durationController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Duración (minutos)'), validator: (v) { final n = int.tryParse(v ?? ''); return n == null || n < 5 || n > 480 ? 'Usa entre 5 y 480 minutos' : null; }),
+            ]),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')),
+          FilledButton(onPressed: () { if (formKey.currentState!.validate()) Navigator.pop(dialogContext, true); }, child: const Text('Guardar')),
+        ],
+      ),
+    );
+    if (accepted != true || !mounted) {
+      nameController.dispose(); descriptionController.dispose(); priceController.dispose(); durationController.dispose();
+      return;
+    }
+
+    final auth = context.read<AuthProvider>();
+    final token = auth.accessToken;
+    final establishmentId = _establishmentId;
+    if (token == null || establishmentId == null) {
+      nameController.dispose();
+      descriptionController.dispose();
+      priceController.dispose();
+      durationController.dispose();
+      return;
+    }
+    try {
+      final uri = service == null
+          ? Uri.parse('${ApiConfig.baseUrl}/services')
+          : Uri.parse('${ApiConfig.baseUrl}/services/${service.id}');
+      final payload = jsonEncode({
+        'establishmentId': establishmentId,
+        'name': nameController.text.trim(),
+        'description': descriptionController.text.trim(),
+        'price': int.parse(priceController.text),
+        'durationMin': int.parse(durationController.text),
+      });
+      final response = service == null
+          ? await http.post(uri, headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'}, body: payload)
+          : await http.put(uri, headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'}, body: payload);
+      if (!mounted) return;
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        await _loadServices();
+      } else {
+        final body = _decodeBody(response.body);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_readMessage(body) ?? 'No se pudo guardar el servicio')));
+      }
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo conectar para guardar el servicio')));
+    } finally {
+      nameController.dispose(); descriptionController.dispose(); priceController.dispose(); durationController.dispose();
+    }
+  }
+
+  Future<void> _deleteService(_ServiceSummary service) async {
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Eliminar servicio'),
+        content: Text('¿Eliminar ${service.name}? Las reservas existentes se conservan y pueden impedir la eliminación.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Eliminar')),
+        ],
+      ),
+    );
+    if (accepted != true || !mounted) return;
+    final token = context.read<AuthProvider>().accessToken;
+    if (token == null) return;
+    try {
+      final response = await http.delete(Uri.parse('${ApiConfig.baseUrl}/services/${service.id}'), headers: {'Authorization': 'Bearer $token'});
+      if (!mounted) return;
+      if (response.statusCode == 200) {
+        await _loadServices();
+      } else {
+        final body = _decodeBody(response.body);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_readMessage(body) ?? 'No se pudo eliminar el servicio')));
+      }
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo conectar para eliminar el servicio')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -942,6 +1043,7 @@ class _BusinessServicesScreenState extends State<BusinessServicesScreen> {
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
         ),
         const SizedBox(height: 8),
+        Align(alignment: Alignment.centerRight, child: FilledButton.icon(onPressed: () => _editService(), icon: const Icon(Icons.add), label: const Text('Agregar servicio'))),
         if (_services.isEmpty)
           const Card(
             child: Padding(
@@ -963,17 +1065,18 @@ class _BusinessServicesScreenState extends State<BusinessServicesScreen> {
                       ? 'Sin descripción'
                       : service.description,
                 ),
-                trailing: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
+                trailing: PopupMenuButton<String>(
+                  onSelected: (action) => action == 'edit' ? _editService(service) : _deleteService(service),
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(value: 'edit', child: Text('Editar')),
+                    PopupMenuItem(value: 'delete', child: Text('Eliminar')),
+                  ],
+                  child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
                     Text(_formatCurrency(service.price)),
                     const SizedBox(height: 4),
-                    Text(
-                      '${service.durationMin} min',
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                  ],
+                    Text('${service.durationMin} min', style: const TextStyle(fontSize: 12)),
+                    const Icon(Icons.more_horiz, size: 18),
+                  ]),
                 ),
               ),
             ),

@@ -204,7 +204,7 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
         $unset: { passwordResetTokenHash: 1, passwordResetExpiresAt: 1 },
         $inc: { tokenVersion: 1 },
       },
-      { new: true, runValidators: true },
+      { returnDocument: 'after', runValidators: true },
     );
 
     if (!updatedUser) {
@@ -278,7 +278,7 @@ export const updateMe = async (req: AuthenticatedRequest, res: Response): Promis
   }
 
   try {
-    const user = await User.findByIdAndUpdate(req.user!.id, { $set: { name, phone } }, { new: true, runValidators: true });
+    const user = await User.findByIdAndUpdate(req.user!.id, { $set: { name, phone } }, { returnDocument: 'after', runValidators: true });
     if (!user) {
       res.status(404).json({ message: 'Usuario no encontrado' });
       return;

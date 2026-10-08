@@ -12,7 +12,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
 void main() {
-  testWidgets('booking app loads without crashing', (
+  testWidgets('booking app waits on splash while auth state is loading', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -26,5 +26,6 @@ void main() {
     await tester.pump();
 
     expect(find.byType(MaterialApp), findsOneWidget);
+    expect(find.text('Booking App'), findsOneWidget);
   });
 }

@@ -382,7 +382,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
             )
             .timeout(const Duration(seconds: 15));
         final establishmentBody = _decodeResponse(establishmentResponse.body);
-        if (establishmentResponse.statusCode == 201) {
+        if (establishmentResponse.statusCode == 200 ||
+            establishmentResponse.statusCode == 201) {
           registered = true;
           _pendingOwnerToken = null;
         } else {

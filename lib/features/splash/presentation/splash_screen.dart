@@ -23,6 +23,7 @@ class _SplashScreenState extends State<SplashScreen> {
     if (!mounted) return;
 
     final auth = context.read<AuthProvider>();
+    if (auth.status == AuthStatus.unknown) return;
     if (auth.isAuthenticated) {
       if (auth.isBusiness) {
         context.go('/business');

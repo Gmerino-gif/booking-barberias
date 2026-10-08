@@ -1,4 +1,5 @@
 import { Booking } from '../models/Booking.js';
+import { BookingSlotLock } from '../models/BookingSlotLock.js';
 import { Professional } from '../models/Professional.js';
 import { Service } from '../models/Service.js';
 import { Establishment } from '../models/Establishment.js';
@@ -40,6 +41,12 @@ export const getAvailableSlots = async (input: AvailabilityInput): Promise<strin
     startAt: { $lt: dayEnd },
     endAt: { $gt: dayStart },
   }).select('startAt endAt');
+  const claimedSlots = await BookingSlotLock.find({
+    professionalId: input.professionalId,
+    slotStartAt: { $gte: dayStart, $lt: dayEnd },
+    $or: [{ expiresAt: { $exists: false } }, { expiresAt: { $gt: new Date() } }],
+  }).select('slotStartAt');
+  const claimedSlotStarts = new Set(claimedSlots.map((slot) => slot.slotStartAt.getTime()));
 
   const openingMinutes = establishment.openingMinutes ?? 540;
   const closingMinutes = establishment.closingMinutes ?? 1080;
@@ -52,7 +59,14 @@ export const getAvailableSlots = async (input: AvailabilityInput): Promise<strin
     .filter((startAt) => startAt > new Date())
     .filter((startAt) => {
       const endAt = new Date(startAt.getTime() + service.durationMin * 60_000);
-      return !bookings.some((booking) => booking.startAt < endAt && booking.endAt > startAt);
+      if (bookings.some((booking) => booking.startAt < endAt && booking.endAt > startAt)) return false;
+      const firstOpeningSlotAt = localMidnightUtc + openingMinutes * 60_000;
+      const firstSlot = firstOpeningSlotAt +
+        Math.floor((startAt.getTime() - firstOpeningSlotAt) / (SLOT_INTERVAL_MINUTES * 60_000)) * SLOT_INTERVAL_MINUTES * 60_000;
+      for (let slot = firstSlot; slot < endAt.getTime(); slot += SLOT_INTERVAL_MINUTES * 60_000) {
+        if (claimedSlotStarts.has(slot)) return false;
+      }
+      return true;
     })
     .map((startAt) => startAt.toISOString());
 };

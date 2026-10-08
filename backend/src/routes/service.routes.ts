@@ -7,6 +7,7 @@ import {
   deleteService,
 } from '../controllers/service.controller.js';
 import { authenticate } from '../middleware/auth.middleware.js';
+import { requireRole } from '../middleware/role.middleware.js';
 
 const router = Router();
 
@@ -15,8 +16,8 @@ router.get('/', getServices);
 router.get('/:id', getServiceById);
 
 // Rutas protegidas (requieren autenticación para crear, modificar o eliminar)
-router.post('/', authenticate, createService);
-router.put('/:id', authenticate, updateService);
-router.delete('/:id', authenticate, deleteService);
+router.post('/', authenticate, requireRole(['owner']), createService);
+router.put('/:id', authenticate, requireRole(['owner']), updateService);
+router.delete('/:id', authenticate, requireRole(['owner']), deleteService);
 
 export default router;

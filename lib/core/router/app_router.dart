@@ -35,6 +35,10 @@ class AppRouter {
           path == '/forgot-password' ||
           path == '/reset-password';
 
+      if (auth.status == AuthStatus.unknown) {
+        return isSplash ? null : '/splash';
+      }
+
       if (auth.status == AuthStatus.unauthenticated) {
         if (isPublicAuthRoute) return null;
         return '/login';
