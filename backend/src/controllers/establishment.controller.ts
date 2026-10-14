@@ -101,15 +101,44 @@ export const getEstablishmentById = async (req: Request, res: Response): Promise
 
 export const getMyEstablishment = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const establishment = await Establishment.findOne({ ownerId: req.user!.id });
+    console.log('=== [getMyEstablishment] INICIANDO ===');
+    console.log('req.user completo:', JSON.stringify(req.user));
+    console.log('req.user.id:', req.user?.id);
+    console.log('Tipo de id:', typeof req.user?.id);
+
+    const ownerId = req.user!.id;
+
+    // Traer TODOS los establecimientos para comparar como strings (workaround)
+    const allEstablishments = await Establishment.find({});
+    console.log('Total establecimientos en BD:', allEstablishments.length);
+    console.log('ownerIds existentes:', allEstablishments.map(e => String(e.ownerId)));
+
+    // Buscar el que coincida con el id del usuario (comparación por string)
+    const establishment = allEstablishments.find(
+      (e) => String(e.ownerId) === String(ownerId)
+    );
+
+    console.log('Establecimiento encontrado:', establishment ? 'SÍ' : 'NO');
+
     if (!establishment) {
-      res.status(404).json({ message: 'No tienes un establecimiento registrado' });
+      res.status(404).json({
+        message: 'No tienes un establecimiento registrado',
+        debug: {
+          userId: ownerId,
+          availableOwnerIds: allEstablishments.map(e => String(e.ownerId)),
+        },
+      });
       return;
     }
 
     res.status(200).json({ establishment: serializeEstablishment(establishment.toObject()) });
-  } catch {
-    res.status(500).json({ message: 'Error al obtener tu establecimiento' });
+  } catch (error) {
+    console.error('=== ERROR en getMyEstablishment ===');
+    console.error(error);
+    res.status(500).json({
+      message: 'Error al obtener tu establecimiento',
+      detail: String(error),
+    });
   }
 };
 

@@ -14,9 +14,15 @@ const router = Router();
 
 router.get('/', getEstablishments);
 router.get('/nearby', getNearby);
-router.get('/:id', getEstablishmentById);
+
+// ⚠️ IMPORTANTE: Las rutas específicas (/me) van ANTES que las dinámicas (/:id)
 router.get('/me', authenticate, requireRole(['owner', 'admin']), getMyEstablishment);
-router.post('/', authenticate, requireRole(['owner', 'admin']), createEstablishment);
 router.put('/me', authenticate, requireRole(['owner', 'admin']), updateMyEstablishment);
+
+// Las rutas dinámicas SIEMPRE van al final
+router.get('/:id', getEstablishmentById);
+
+// Crear establecimiento (POST)
+router.post('/', authenticate, requireRole(['owner', 'admin']), createEstablishment);
 
 export default router;
