@@ -235,9 +235,9 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
         );
       }
 
-      await showDialog<void>(
+      final shouldViewBookings = await showDialog<bool>(
         context: context,
-        builder: (_) => AlertDialog(
+        builder: (dialogContext) => AlertDialog(
           title: const Row(
             children: [
               Icon(Icons.check_circle, color: Colors.green, size: 28),
@@ -251,14 +251,16 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.pop(context);
-                context.go('/client/my-bookings');
+                Navigator.of(dialogContext).pop(true);
               },
               child: const Text('Ver reservas'),
             ),
           ],
         ),
       );
+      if (shouldViewBookings == true && mounted) {
+        context.go('/client/my-bookings');
+      }
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
