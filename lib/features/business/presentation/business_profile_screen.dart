@@ -10,6 +10,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/network/api_config.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/image_edit_field.dart';
 import '../../auth/providers/auth_provider.dart';
 
 class BusinessProfileScreen extends StatefulWidget {
@@ -44,6 +45,8 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
   LatLng? _selectedLocation;
   int _searchRequestSequence = 0;
   DateTime? _lastNominatimRequestAt;
+  String? _bannerRef;
+  String? _logoRef;
 
   static const _defaultMapCenter = LatLng(10.920684, -74.8097153);
   static const _nominatimUserAgent =
@@ -65,6 +68,12 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
     _locationSearchCtrl.dispose();
     _mapController.dispose();
     super.dispose();
+  }
+
+  /// Normaliza las referencias de imagen que llegan de la API.
+  String? _imageRef(Object? value) {
+    final text = value?.toString().trim() ?? '';
+    return text.isEmpty ? null : text;
   }
 
   String? _validateName(String? value) {
@@ -147,6 +156,8 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
       _addressCtrl.text = (establishment['address'] ?? '').toString();
       _cityCtrl.text = (establishment['city'] ?? '').toString();
       _descriptionCtrl.text = (establishment['description'] ?? '').toString();
+      _bannerRef = _imageRef(establishment['banner']);
+      _logoRef = _imageRef(establishment['logo']);
       _openingMinutes =
           (establishment['openingMinutes'] as num?)?.toInt() ?? 9 * 60;
       _closingMinutes =
@@ -221,6 +232,8 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
               'phone': _phoneCtrl.text.trim(),
               'openingMinutes': _openingMinutes,
               'closingMinutes': _closingMinutes,
+              'banner': _bannerRef ?? '',
+              'logo': _logoRef ?? '',
             }),
           )
           .timeout(const Duration(seconds: 15));
@@ -548,6 +561,42 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
                         ),
                         validator: (value) =>
                             _validateRequired(value, 'la descripción', 1000),
+                      ),
+                      const SizedBox(height: 24),
+                      Text(
+                        'Imágenes del negocio',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'El banner es la portada que ven tus clientes y el logo los identifica en las búsquedas.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      ImageEditField(
+                        label: 'Banner de portada',
+                        value: _bannerRef,
+                        authToken: context.read<AuthProvider>().accessToken,
+                        onChanged: (value) =>
+                            setState(() => _bannerRef = value),
+                        helperText:
+                            'Formato panorámico, por ejemplo 1200 × 400 px.',
+                        height: 150,
+                      ),
+                      const SizedBox(height: 20),
+                      ImageEditField(
+                        label: 'Logo del negocio',
+                        value: _logoRef,
+                        authToken: context.read<AuthProvider>().accessToken,
+                        onChanged: (value) => setState(() => _logoRef = value),
+                        helperText:
+                            'Imagen cuadrada: se muestra en círculo en el perfil público.',
+                        height: 120,
+                        circular: true,
                       ),
                       const SizedBox(height: 24),
                       Text(

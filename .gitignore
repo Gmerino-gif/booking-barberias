@@ -53,3 +53,7 @@ app.*.map.json
 node_modules/
 dist/
 .env
+
+# Imágenes subidas por los negocios (contenido generado en tiempo de ejecución)
+backend/uploads/
+

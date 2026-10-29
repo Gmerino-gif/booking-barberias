@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { Establishment } from '../models/Establishment.js';
 import { isValidPhoneNumber } from '../utils/phone.js';
+import { parseImageRef, removeStoredImage } from '../utils/uploads.js';
 import type { AuthenticatedRequest } from '../middleware/auth.middleware.js';
 
 const serializeEstablishment = (establishment: Record<string, any>) => {
@@ -17,6 +18,9 @@ const serializeEstablishment = (establishment: Record<string, any>) => {
     city: establishment.city,
     description: establishment.description ?? '',
     phone: establishment.phone,
+    photos: Array.isArray(establishment.photos) ? establishment.photos : [],
+    banner: establishment.banner || null,
+    logo: establishment.logo || null,
     rating: establishment.rating ?? 0,
     openingMinutes: establishment.openingMinutes ?? 540,
     closingMinutes: establishment.closingMinutes ?? 1080,
@@ -227,6 +231,14 @@ export const updateMyEstablishment = async (req: AuthenticatedRequest, res: Resp
   const lng = Number.isFinite(Number(body?.lng)) ? Number(body?.lng) : Number(currentCoords[0]);
   const openingMinutes = body?.openingMinutes === undefined ? establishment.openingMinutes ?? 540 : Number(body.openingMinutes);
   const closingMinutes = body?.closingMinutes === undefined ? establishment.closingMinutes ?? 1080 : Number(body.closingMinutes);
+  const logoRef = parseImageRef(body?.logo);
+  const bannerRef = parseImageRef(body?.banner);
+
+  if (logoRef === null || bannerRef === null) {
+    res.status(400).json({ message: 'La imagen del negocio no es válida' });
+    return;
+  }
+
 
   if (!validateEstablishmentInput(name, address, city, description, phone, lat, lng) ||
       !Number.isInteger(openingMinutes) || !Number.isInteger(closingMinutes) ||
@@ -248,6 +260,8 @@ export const updateMyEstablishment = async (req: AuthenticatedRequest, res: Resp
           location: { type: 'Point', coordinates: [lng, lat] },
           openingMinutes,
           closingMinutes,
+          ...(logoRef === undefined ? {} : { logo: logoRef }),
+          ...(bannerRef === undefined ? {} : { banner: bannerRef }),
         },
       },
       { returnDocument: 'after', runValidators: true },
@@ -257,6 +271,14 @@ export const updateMyEstablishment = async (req: AuthenticatedRequest, res: Resp
       res.status(404).json({ message: 'No se pudo actualizar el establecimiento' });
       return;
     }
+
+    if (logoRef !== undefined && logoRef !== (establishment.logo ?? '')) {
+      await removeStoredImage(establishment.logo);
+    }
+    if (bannerRef !== undefined && bannerRef !== (establishment.banner ?? '')) {
+      await removeStoredImage(establishment.banner);
+    }
+
 
     res.status(200).json({
       message: 'Establecimiento actualizado exitosamente',

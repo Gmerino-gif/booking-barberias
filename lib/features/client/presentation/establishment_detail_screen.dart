@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import '../../../core/network/api_config.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/image_urls.dart';
 import '../../auth/providers/auth_provider.dart';
 
 class EstablishmentDetail {
@@ -15,6 +16,11 @@ class EstablishmentDetail {
   final String name;
   final String description;
   final List<String> photos;
+
+  /// Banner de portada y logo del negocio (referencias `/uploads/...` o URL).
+  final String? banner;
+  final String? logo;
+
   final String address;
   final String city;
   final String phone;
@@ -26,6 +32,8 @@ class EstablishmentDetail {
     required this.name,
     required this.description,
     required this.photos,
+    this.banner,
+    this.logo,
     required this.address,
     required this.city,
     required this.phone,
@@ -56,11 +64,19 @@ class ProfessionalItem {
   final String id;
   final String name;
   final String specialty;
+  final String? photo;
+
+  /// Promedio de estrellas recibidas y número de calificaciones.
+  final double rating;
+  final int reviewCount;
 
   const ProfessionalItem({
     required this.id,
     required this.name,
     required this.specialty,
+    this.photo,
+    this.rating = 0,
+    this.reviewCount = 0,
   });
 }
 
@@ -71,12 +87,20 @@ class ReviewItem {
   final String comment;
   final String timeAgo;
 
+  /// Profesional calificado en la reseña (puede faltar en reseñas antiguas).
+  final String? professionalName;
+
+  /// Etiquetas de opinión rápida elegidas por el cliente.
+  final List<String> tags;
+
   const ReviewItem({
     required this.id,
     required this.userName,
     required this.rating,
     required this.comment,
     required this.timeAgo,
+    this.professionalName,
+    this.tags = const [],
   });
 }
 
@@ -193,7 +217,12 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
                   .toString(),
           description: (establishmentMap['description'] ?? 'Sin descripción')
               .toString(),
-          photos: const [],
+          photos: (establishmentMap['photos'] as List<dynamic>? ?? const [])
+              .map((photo) => photo.toString().trim())
+              .where((photo) => photo.isNotEmpty)
+              .toList(),
+          banner: _imageRef(establishmentMap['banner']),
+          logo: _imageRef(establishmentMap['logo']),
           address: (establishmentMap['address'] ?? '').toString(),
           city: (establishmentMap['city'] ?? '').toString(),
           phone: (establishmentMap['phone'] ?? widget.establishmentPhone ?? '')
@@ -228,6 +257,12 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
                 id: (item['_id'] ?? item['id'] ?? '').toString(),
                 name: (item['name'] ?? 'Profesional').toString(),
                 specialty: (item['specialty'] ?? 'Barbero').toString(),
+                photo: _imageRef(item['photo']),
+                rating: (item['rating'] is num ? item['rating'] : 0).toDouble(),
+                reviewCount: (item['reviewCount'] is num
+                        ? item['reviewCount']
+                        : 0)
+                    .toInt(),
               );
             })
             .toList();
@@ -236,12 +271,23 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
           final userName = userMap is Map<String, dynamic>
               ? (userMap['name'] ?? 'Usuario').toString()
               : 'Usuario';
+          final professionalMap = item['professionalId'];
+          final rawTags = item['tags'];
           return ReviewItem(
             id: (item['_id'] ?? item['id'] ?? '').toString(),
             userName: userName,
             rating: (item['rating'] is num ? item['rating'] : 0).toInt(),
             comment: (item['comment'] ?? '').toString(),
             timeAgo: 'Reciente',
+            professionalName: professionalMap is Map<String, dynamic>
+                ? (professionalMap['name'] ?? '').toString()
+                : null,
+            tags: rawTags is List
+                ? rawTags
+                      .map((tag) => tag.toString().trim())
+                      .where((tag) => tag.isNotEmpty)
+                      .toList()
+                : const [],
           );
         }).toList();
         _isLoading = false;
@@ -326,6 +372,15 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
   // Utilidades
   // ============================================================
   String _formatPrice(int value) => AppFormatters.currency(value);
+
+  /// Normaliza una referencia de imagen del API (`null` si viene vacía).
+  String? _imageRef(Object? value) {
+    final ref = value?.toString().trim() ?? '';
+    return ref.isEmpty ? null : ref;
+  }
+
+  /// URL absoluta lista para `Image.network`/`NetworkImage`.
+  String? _imageUrl(String? ref) => AppImageUrls.resolve(ref);
 
   /// Vuelve al listado principal de barberías.
   void _goBack() => context.go('/client');
@@ -448,8 +503,11 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
           .showSnackBar(const SnackBar(content: Text('Reseña publicada')));
       await _loadData();
     } else {
+      final message = _readMessage(_decodeBody(response.body));
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No se pudo publicar la reseña')),
+        SnackBar(
+          content: Text(message ?? 'No se pudo publicar la reseña'),
+        ),
       );
     }
   }
@@ -518,23 +576,7 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
               background: Stack(
                 fit: StackFit.expand,
                 children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          theme.colorScheme.primary,
-                          theme.colorScheme.primary.withValues(alpha: 0.7),
-                        ],
-                      ),
-                    ),
-                    child: Icon(
-                      Icons.store,
-                      size: 100,
-                      color: theme.colorScheme.onPrimary.withValues(alpha: 0.3),
-                    ),
-                  ),
+                  _buildBannerBackground(theme),
                   Container(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
@@ -558,7 +600,7 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildInfoRow(theme),
+                  _buildIdentityRow(theme),
                   const SizedBox(height: 20),
                   _buildDescription(theme),
                   const SizedBox(height: 24),
@@ -626,6 +668,63 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
   // ============================================================
   // WIDGETS AUXILIARES
   // ============================================================
+
+  /// Fondo del encabezado: banner del negocio o degradado con el icono por
+  /// defecto cuando aún no se ha subido una imagen.
+  Widget _buildBannerBackground(ThemeData theme) {
+    final placeholder = Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            theme.colorScheme.primary,
+            theme.colorScheme.primary.withValues(alpha: 0.7),
+          ],
+        ),
+      ),
+      child: Icon(
+        Icons.store,
+        size: 100,
+        color: theme.colorScheme.onPrimary.withValues(alpha: 0.3),
+      ),
+    );
+
+    final bannerUrl = _imageUrl(_establishment.banner) ??
+        (_establishment.photos.isEmpty
+            ? null
+            : _imageUrl(_establishment.photos.first));
+    if (bannerUrl == null) return placeholder;
+
+    return Image.network(
+      bannerUrl,
+      fit: BoxFit.cover,
+      errorBuilder: (context, error, stackTrace) => placeholder,
+      loadingBuilder: (context, child, progress) =>
+          progress == null ? child : placeholder,
+    );
+  }
+
+  /// Logo del negocio junto a la valoración y la dirección.
+  Widget _buildIdentityRow(ThemeData theme) {
+    final logoUrl = _imageUrl(_establishment.logo);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        CircleAvatar(
+          radius: 28,
+          backgroundColor: theme.colorScheme.primary,
+          foregroundImage: logoUrl == null ? null : NetworkImage(logoUrl),
+          child: Icon(
+            Icons.storefront_outlined,
+            color: theme.colorScheme.onPrimary,
+          ),
+        ),
+        const SizedBox(width: AppSpacing.md),
+        Expanded(child: _buildInfoRow(theme)),
+      ],
+    );
+  }
 
   Widget _buildInfoRow(ThemeData theme) {
     return Row(
@@ -843,13 +942,14 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
 
   Widget _buildProfessionalsList(ThemeData theme) {
     return SizedBox(
-      height: 110,
+      height: 132,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: _professionals.length,
         separatorBuilder: (_, _) => const SizedBox(width: 10),
         itemBuilder: (context, i) {
           final p = _professionals[i];
+          final photoUrl = _imageUrl(p.photo);
           return Container(
             width: 130,
             padding: const EdgeInsets.all(12),
@@ -865,6 +965,9 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
                 CircleAvatar(
                   radius: 22,
                   backgroundColor: theme.colorScheme.primary,
+                  foregroundImage: photoUrl == null
+                      ? null
+                      : NetworkImage(photoUrl),
                   child: Text(
                     p.name.substring(0, 1),
                     style: theme.textTheme.titleLarge?.copyWith(
@@ -891,6 +994,33 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.center,
                 ),
+                if (p.reviewCount > 0)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.star,
+                          size: 12,
+                          color: theme.colorScheme.secondary,
+                        ),
+                        const SizedBox(width: 2),
+                        Text(
+                          p.rating.toStringAsFixed(1),
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            fontWeight: AppTypography.bold,
+                          ),
+                        ),
+                        Text(
+                          ' (${p.reviewCount})',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
               ],
             ),
           );
@@ -961,14 +1091,67 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            review.comment,
-            style: theme.textTheme.bodySmall?.copyWith(
-              height: 1.4,
-              color: theme.colorScheme.onSurface,
+          if (review.professionalName != null &&
+              review.professionalName!.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Icon(
+                  Icons.content_cut,
+                  size: 12,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    'Atención de ${review.professionalName}',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ),
+          ],
+          if (review.tags.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: review.tags
+                  .map(
+                    (tag) => Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary.withValues(
+                          alpha: 0.08,
+                        ),
+                        borderRadius: BorderRadius.circular(AppRadius.sm),
+                      ),
+                      child: Text(
+                        tag,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ],
+          if (review.comment.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              review.comment,
+              style: theme.textTheme.bodySmall?.copyWith(
+                height: 1.4,
+                color: theme.colorScheme.onSurface,
+              ),
+            ),
+          ],
         ],
       ),
     );

@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 
 import '../../../core/network/api_config.dart';
+import '../../../core/utils/image_urls.dart';
 import '../../auth/providers/auth_provider.dart';
 
 class FavoritesScreen extends StatefulWidget {
@@ -104,6 +105,12 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
         ),
       );
     }
+  }
+
+  /// Logo del negocio resuelto a una imagen mostrable (o `null` para el icono).
+  ImageProvider<Object>? _logoProvider(String? logo) {
+    final url = AppImageUrls.resolve(logo);
+    return url == null ? null : NetworkImage(url);
   }
 
   @override
@@ -206,6 +213,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
     final rating = establishment['rating'] is num
         ? (establishment['rating'] as num).toDouble()
         : null;
+    final logo = (establishment['logo'] as String?)?.trim();
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -218,6 +226,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         leading: CircleAvatar(
           backgroundColor: theme.colorScheme.primary,
+          foregroundImage: _logoProvider(logo),
           child: Icon(Icons.store, color: theme.colorScheme.onPrimary),
         ),
         title: Text(

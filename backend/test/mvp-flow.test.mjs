@@ -226,3 +226,249 @@ test('flujo integral negocio → servicio → reserva → reseña y límites de 
     method: 'DELETE', token: owner.token,
   })).status, 200);
 });
+
+// PNG de 1x1 píxel: sirve para comprobar que el servidor valida el formato real
+// del archivo (no confía en el mime declarado en el data URL).
+const PNG_DATA_URL =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==';
+
+test('imágenes de negocio y de profesionales: permisos, validación y publicación', async () => {
+  const owner = await register('owner', 'imagenes-negocio');
+  const client = await register('client', 'imagenes-cliente');
+  const origin = baseUrl.replace(/\/api$/, '');
+  const { removeStoredImage } = await import('../dist/utils/uploads.js');
+
+  // Permisos: la subida exige token y rol de negocio.
+  assert.equal((await call('/uploads/image', {
+    method: 'POST', body: { image: PNG_DATA_URL },
+  })).status, 401);
+  assert.equal((await call('/uploads/image', {
+    method: 'POST', token: client.token, body: { image: PNG_DATA_URL },
+  })).status, 403, 'Solo dueños y admin pueden subir imágenes');
+
+  // Validación del contenido.
+  assert.equal((await call('/uploads/image', {
+    method: 'POST', token: owner.token, body: {},
+  })).status, 400);
+  assert.equal((await call('/uploads/image', {
+    method: 'POST', token: owner.token, body: { image: 'data:image/png;base64,' },
+  })).status, 400);
+  const notAnImage = Buffer.from('esto no es una imagen').toString('base64');
+  assert.equal((await call('/uploads/image', {
+    method: 'POST', token: owner.token, body: { image: `data:image/png;base64,${notAnImage}` },
+  })).status, 400, 'Debe validar el formato real del archivo, no el mime declarado');
+
+  const logoUpload = await call('/uploads/image', {
+    method: 'POST', token: owner.token, body: { image: PNG_DATA_URL },
+  });
+  assert.equal(logoUpload.status, 201, JSON.stringify(logoUpload.payload));
+  const logoRef = logoUpload.payload.url;
+  assert.match(logoRef, /^\/uploads\/[a-z0-9-]+\.png$/);
+
+  const bannerUpload = await call('/uploads/image', {
+    method: 'POST', token: owner.token, body: { image: PNG_DATA_URL },
+  });
+  assert.equal(bannerUpload.status, 201);
+  const bannerRef = bannerUpload.payload.url;
+  assert.notEqual(bannerRef, logoRef, 'Cada subida debe generar un archivo propio');
+
+  const served = await fetch(`${origin}${logoRef}`);
+  assert.equal(served.status, 200, 'La imagen subida debe servirse públicamente');
+  assert.equal((served.headers.get('content-type') ?? '').split(';')[0], 'image/png');
+  await served.arrayBuffer();
+
+  const created = await call('/establishments', {
+    method: 'POST', token: owner.token,
+    body: {
+      name: 'Barbería con imágenes', address: 'Calle 1 # 2-3', city: 'Barranquilla',
+      description: 'Prueba de imágenes', phone: '3001234567', lat: 10.92, lng: -74.8,
+    },
+  });
+  assert.equal(created.status, 201, JSON.stringify(created.payload));
+  const establishmentId = String(created.payload.establishment._id ?? created.payload.establishment.id);
+
+  const profileUpdate = await call('/establishments/me', {
+    method: 'PUT', token: owner.token, body: { logo: logoRef, banner: bannerRef },
+  });
+  assert.equal(profileUpdate.status, 200, JSON.stringify(profileUpdate.payload));
+  assert.equal(profileUpdate.payload.establishment.logo, logoRef);
+  assert.equal(profileUpdate.payload.establishment.banner, bannerRef);
+
+  const publicProfile = await call(`/establishments/${establishmentId}`);
+  assert.equal(publicProfile.status, 200);
+  assert.equal(publicProfile.payload.establishment.logo, logoRef,
+    'El logo debe llegar a la vista pública que consume el cliente');
+
+  const professional = await call('/professionals', {
+    method: 'POST', token: owner.token,
+    body: { name: 'Alex', specialty: 'Barbería', photo: bannerRef },
+  });
+  assert.equal(professional.status, 201, JSON.stringify(professional.payload));
+  assert.equal(professional.payload.professional.photo, bannerRef);
+  const listedProfessionals = await call(`/professionals/establishment/${establishmentId}`);
+  assert.equal(listedProfessionals.status, 200);
+  assert.ok(listedProfessionals.payload.professionals.some((item) => item.photo === bannerRef),
+    'La foto debe exponerse en el listado público de profesionales');
+
+  assert.equal((await call('/professionals', {
+    method: 'POST', token: owner.token,
+    body: { name: 'Sin formato', specialty: 'Barbería', photo: 'no-es-una-imagen' },
+  })).status, 400, 'Debe rechazar referencias de imagen que no sean válidas');
+
+  // Quitar la imagen borra el archivo anterior del disco.
+  const cleared = await call('/establishments/me', {
+    method: 'PUT', token: owner.token, body: { logo: '' },
+  });
+  assert.equal(cleared.status, 200);
+  assert.equal(cleared.payload.establishment.logo, null);
+  assert.equal((await fetch(`${origin}${logoRef}`)).status, 404,
+    'Quitar la imagen debe borrar el archivo almacenado');
+
+  await removeStoredImage(bannerRef);
+});
+
+test('reseña desde el historial: etiquetas, profesional y recálculo de promedios', async () => {
+  const owner = await register('owner', 'resenas-negocio');
+  const client = await register('client', 'resenas-cliente');
+  const otherClient = await register('client', 'resenas-ajeno');
+
+  const created = await call('/establishments', {
+    method: 'POST', token: owner.token,
+    body: {
+      name: 'Barbería con reseñas', address: 'Calle 5 # 6-7', city: 'Barranquilla',
+      description: 'Prueba de reseñas', phone: '3001234567', lat: 10.92, lng: -74.8,
+    },
+  });
+  assert.equal(created.status, 201, JSON.stringify(created.payload));
+  const establishmentId = String(created.payload.establishment._id ?? created.payload.establishment.id);
+
+  const serviceResult = await call('/services', {
+    method: 'POST', token: owner.token, body: { name: 'Degradado', price: 40000, durationMin: 30 },
+  });
+  assert.equal(serviceResult.status, 201, JSON.stringify(serviceResult.payload));
+  const serviceId = serviceResult.payload.service._id;
+
+  const professionalResult = await call('/professionals', {
+    method: 'POST', token: owner.token, body: { name: 'Alex', specialty: 'Barbería' },
+  });
+  assert.equal(professionalResult.status, 201, JSON.stringify(professionalResult.payload));
+  const professional = professionalResult.payload.professional;
+  assert.equal(professional.rating, 0, 'Un profesional nuevo debe empezar sin calificación');
+  assert.equal(professional.reviewCount, 0);
+
+  const localTomorrow = new Date(Date.now() - 5 * 60 * 60 * 1000);
+  localTomorrow.setUTCDate(localTomorrow.getUTCDate() + 1);
+  const date = `${localTomorrow.getUTCFullYear()}-${String(localTomorrow.getUTCMonth() + 1).padStart(2, '0')}-${String(localTomorrow.getUTCDate()).padStart(2, '0')}`;
+  const startAt = new Date(Date.UTC(localTomorrow.getUTCFullYear(), localTomorrow.getUTCMonth(), localTomorrow.getUTCDate(), 16));
+  const availabilityQuery = new URLSearchParams({
+    establishmentId, professionalId: professional._id,
+    serviceId, date, utcOffsetMinutes: '-300',
+  });
+  const availability = await call(`/bookings/availability?${availabilityQuery}`);
+  assert.equal(availability.status, 200, JSON.stringify(availability.payload));
+  assert.ok(availability.payload.slots.includes(startAt.toISOString()));
+
+  const bookingResult = await call('/bookings', {
+    method: 'POST', token: client.token,
+    body: {
+      establishmentId, professionalId: professional._id,
+      serviceId, startAt: startAt.toISOString(), utcOffsetMinutes: -300,
+    },
+  });
+  assert.equal(bookingResult.status, 201, JSON.stringify(bookingResult.payload));
+  const bookingId = String(bookingResult.payload.booking._id ?? bookingResult.payload.booking.id);
+
+  const reviewBody = {
+    bookingId, establishmentId, professionalId: professional._id,
+    rating: 5, ratingProfessional: 4,
+    tags: ['Excelente atención', 'Puntual'], comment: '',
+  };
+
+  // Sólo se califica un servicio terminado.
+  assert.equal((await call('/reviews', {
+    method: 'POST', token: client.token, body: reviewBody,
+  })).status, 403, 'No debe calificarse una cita aún no completada');
+  assert.equal((await call('/reviews', {
+    method: 'POST', token: otherClient.token, body: reviewBody,
+  })).status, 404, 'Otra persona no puede calificar una reserva ajena');
+
+  // Validación de los datos de la reseña.
+  assert.equal((await call('/reviews', {
+    method: 'POST', token: client.token, body: { ...reviewBody, rating: 9 },
+  })).status, 400);
+  assert.equal((await call('/reviews', {
+    method: 'POST', token: client.token, body: { ...reviewBody, comment: 'x'.repeat(501) },
+  })).status, 400);
+  assert.equal((await call('/reviews', {
+    method: 'POST', token: client.token, body: { bookingId },
+  })).status, 400, 'Debe exigir etiquetas, estrellas o comentario');
+
+  // Completar el servicio habilita la reseña.
+  const { Booking } = await import('../dist/models/Booking.js');
+  await Booking.findByIdAndUpdate(bookingId, {
+    startAt: new Date(Date.now() - 20 * 60 * 1000), endAt: new Date(Date.now() - 5 * 60 * 1000),
+  });
+  assert.equal((await call(`/bookings/${bookingId}/status`, {
+    method: 'PATCH', token: owner.token, body: { status: 'completed' },
+  })).status, 200);
+
+  assert.equal((await call('/reviews', {
+    method: 'POST', token: client.token,
+    body: { ...reviewBody, professionalId: '000000000000000000000002' },
+  })).status, 400, 'El profesional debe coincidir con el de la reserva');
+  assert.equal((await call('/reviews', {
+    method: 'POST', token: client.token,
+    body: { ...reviewBody, establishmentId: '000000000000000000000003' },
+  })).status, 400, 'El establecimiento debe coincidir con el de la reserva');
+
+  const published = await call('/reviews', { method: 'POST', token: client.token, body: reviewBody });
+  assert.equal(published.status, 201, JSON.stringify(published.payload));
+  const review = published.payload.review;
+  assert.deepEqual(review.tags, ['Excelente atención', 'Puntual']);
+  assert.equal(review.rating, 5);
+  assert.equal(review.ratingProfessional, 4);
+  assert.equal(String(review.bookingId), bookingId, 'La reseña queda ligada a la cita');
+  assert.equal(String(review.professionalId), String(professional._id));
+
+  assert.equal((await call('/reviews', {
+    method: 'POST', token: client.token, body: reviewBody,
+  })).status, 409, 'Una cita sólo admite una reseña');
+
+  // Los promedios se recalculan en el establecimiento y en el barbero.
+  const ratedProfessional = (await call(`/professionals/establishment/${establishmentId}`))
+    .payload.professionals.find((item) => String(item._id) === String(professional._id));
+  assert.equal(ratedProfessional.rating, 4, 'El barbero debe reflejar las estrellas que recibió');
+  assert.equal(ratedProfessional.reviewCount, 1);
+  assert.equal((await call(`/establishments/${establishmentId}`)).payload.establishment.rating, 5);
+
+  const myReviews = await call('/reviews/my', { token: client.token });
+  assert.equal(myReviews.status, 200);
+  const own = myReviews.payload.reviews.find((item) => String(item.bookingId) === bookingId);
+  assert.ok(own, 'El historial del cliente debe reconocer la cita ya calificada');
+  assert.equal(own.establishmentId.name, 'Barbería con reseñas');
+  assert.equal(own.professionalId.name, 'Alex');
+
+  const publicReviews = await call(`/reviews/establishment/${establishmentId}`);
+  assert.equal(publicReviews.status, 200);
+  const publicReview = publicReviews.payload.reviews.find((item) => String(item.bookingId) === bookingId);
+  assert.equal(publicReview.professionalId.name, 'Alex',
+    'La vista pública debe mostrar a qué barbero se calificó');
+  assert.deepEqual(publicReview.tags, ['Excelente atención', 'Puntual']);
+
+  // El panel del negocio recibe la reseña junto a la cita correspondiente.
+  const businessView = await call('/bookings/business', { token: owner.token });
+  assert.equal(businessView.status, 200);
+  const reviewedBooking = businessView.payload.bookings.find((item) => item.id === bookingId);
+  assert.ok(reviewedBooking, 'La cita debe aparecer en la agenda del negocio');
+  assert.equal(reviewedBooking.review.rating, 5);
+  assert.equal(reviewedBooking.review.ratingProfessional, 4);
+  assert.deepEqual(reviewedBooking.review.tags, ['Excelente atención', 'Puntual']);
+
+  // Eliminar la reseña devuelve los promedios a cero (no deja datos obsoletos).
+  assert.equal((await call(`/reviews/${review._id}`, { method: 'DELETE', token: client.token })).status, 200);
+  const resetProfessional = (await call(`/professionals/establishment/${establishmentId}`))
+    .payload.professionals.find((item) => String(item._id) === String(professional._id));
+  assert.equal(resetProfessional.rating, 0);
+  assert.equal(resetProfessional.reviewCount, 0);
+  assert.equal((await call(`/establishments/${establishmentId}`)).payload.establishment.rating, 0);
+});

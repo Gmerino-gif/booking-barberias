@@ -41,6 +41,72 @@ String? _resolveValue(
   return trimmed.isEmpty ? null : trimmed;
 }
 
+int? _readRating(dynamic value) {
+  if (value is num) return value.round();
+  if (value is String) return int.tryParse(value);
+  return null;
+}
+
+List<String> _readTags(dynamic value) {
+  if (value is! List) return const [];
+  return value
+      .whereType<String>()
+      .map((tag) => tag.trim())
+      .where((tag) => tag.isNotEmpty)
+      .toList();
+}
+
+/// Reseña que el cliente dejó al servicio; `null` mientras no lo califique.
+_BookingReview? _mapBookingReview(dynamic raw) {
+  if (raw is! Map<String, dynamic>) return null;
+  final review = _BookingReview(
+    rating: _readRating(raw['rating']),
+    ratingProfessional: _readRating(raw['ratingProfessional']),
+    tags: _readTags(raw['tags']),
+    comment: (raw['comment'] is String ? raw['comment'] as String : '').trim(),
+  );
+  return review.isEmpty ? null : review;
+}
+
+class _BookingReview {
+  final int? rating;
+  final int? ratingProfessional;
+  final List<String> tags;
+  final String comment;
+
+  const _BookingReview({
+    this.rating,
+    this.ratingProfessional,
+    this.tags = const [],
+    this.comment = '',
+  });
+
+  bool get isEmpty =>
+      rating == null &&
+      ratingProfessional == null &&
+      tags.isEmpty &&
+      comment.isEmpty;
+}
+
+/// Reseña del establecimiento tal como la ve el negocio (con el autor).
+class _ReviewSummary {
+  final String clientName;
+  final String? professionalName;
+  final int? rating;
+  final int? ratingProfessional;
+  final List<String> tags;
+  final String comment;
+
+  const _ReviewSummary({
+    required this.clientName,
+    this.professionalName,
+    this.rating,
+    this.ratingProfessional,
+    this.tags = const [],
+    this.comment = '',
+  });
+}
+
 class _BookingSummary {
   final String id;
   final String clientName;
@@ -50,6 +116,7 @@ class _BookingSummary {
   final DateTime startAt;
   final int price;
   final String status;
+  final _BookingReview? review;
 
   const _BookingSummary({
     required this.id,
@@ -60,6 +127,7 @@ class _BookingSummary {
     required this.startAt,
     required this.price,
     required this.status,
+    this.review,
   });
 }
 
@@ -91,8 +159,10 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
   bool _isLoading = true;
   String? _error;
   String _businessName = 'Negocio';
+  double _rating = 0;
   List<_BookingSummary> _bookings = const [];
   List<_ServiceSummary> _services = const [];
+  List<_ReviewSummary> _reviews = const [];
 
   @override
   void initState() {
@@ -135,6 +205,9 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
       final establishmentId =
           (establishment['_id'] ?? establishment['id'] ?? '').toString();
       final businessName = (establishment['name'] ?? 'Negocio').toString();
+      final rating = establishment['rating'] is num
+          ? (establishment['rating'] as num).toDouble()
+          : 0.0;
 
       final bookingsFuture = http.get(
         Uri.parse('${ApiConfig.baseUrl}/bookings/business'),
@@ -149,14 +222,23 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
           'Content-Type': 'application/json; charset=UTF-8',
         },
       );
+      // Reseñas que los clientes dejaron al negocio y a cada barbero.
+      final reviewsFuture = http.get(
+        Uri.parse(
+          '${ApiConfig.baseUrl}/reviews/establishment/$establishmentId',
+        ),
+        headers: {'Authorization': 'Bearer $token'},
+      );
 
       final responses = await Future.wait([
         bookingsFuture.timeout(const Duration(seconds: 15)),
         servicesFuture.timeout(const Duration(seconds: 15)),
+        reviewsFuture.timeout(const Duration(seconds: 15)),
       ]);
 
       final bookingsBody = _decodeBody(responses[0].body);
       final servicesBody = _decodeBody(responses[1].body);
+      final reviewsBody = _decodeBody(responses[2].body);
 
       final bookingsList =
           (bookingsBody is Map<String, dynamic>
@@ -170,11 +252,17 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
                   : null)
               as List<dynamic>? ??
           const [];
+      // Un fallo al traer reseñas no debe romper el panel: se lista vacío.
+      final reviewsList =
+          (reviewsBody is Map<String, dynamic> ? reviewsBody['reviews'] : null)
+              as List<dynamic>? ??
+          const [];
 
       if (!mounted) return;
 
       setState(() {
         _businessName = businessName;
+        _rating = rating;
         _bookings = bookingsList
             .whereType<Map<String, dynamic>>()
             .map(_mapBooking)
@@ -182,6 +270,10 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
         _services = servicesList
             .whereType<Map<String, dynamic>>()
             .map(_mapService)
+            .toList();
+        _reviews = reviewsList
+            .whereType<Map<String, dynamic>>()
+            .map(_mapReview)
             .toList();
         _isLoading = false;
         _error = null;
@@ -222,6 +314,31 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
           AppFormatters.parseApiDateTime(map['startAt']) ?? DateTime.now(),
       price: _readInt(map['price']) ?? _readInt(service?['price']) ?? 0,
       status: (map['status'] ?? 'pending').toString(),
+      review: _mapBookingReview(map['review']),
+    );
+  }
+
+  _ReviewSummary _mapReview(Map<String, dynamic> map) {
+    final author = map['userId'] is Map<String, dynamic>
+        ? map['userId'] as Map<String, dynamic>
+        : null;
+    final professional = map['professionalId'] is Map<String, dynamic>
+        ? map['professionalId'] as Map<String, dynamic>
+        : null;
+
+    return _ReviewSummary(
+      clientName: _resolveLabel(map, 'clientName', author, 'name', 'Cliente'),
+      professionalName: _resolveValue(
+        map,
+        'professionalName',
+        professional,
+        'name',
+      ),
+      rating: _readRating(map['rating']),
+      ratingProfessional: _readRating(map['ratingProfessional']),
+      tags: _readTags(map['tags']),
+      comment: (map['comment'] is String ? map['comment'] as String : '')
+          .trim(),
     );
   }
 
@@ -342,9 +459,26 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
           style: Theme.of(context).textTheme.headlineSmall,
         ),
         const SizedBox(height: AppSpacing.xs),
-        Text(
-          'Resumen del negocio',
-          style: Theme.of(context).textTheme.bodyMedium,
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Resumen del negocio',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ),
+            // Promedio de estrellas que los clientes le dieron al negocio.
+            if (_rating > 0)
+              Chip(
+                avatar: Icon(
+                  Icons.star,
+                  size: 16,
+                  color: Theme.of(context).colorScheme.secondary,
+                ),
+                label: Text(_rating.toStringAsFixed(1)),
+                visualDensity: VisualDensity.compact,
+              ),
+          ],
         ),
         const SizedBox(height: AppSpacing.md),
         Row(
@@ -464,6 +598,182 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
               ),
             );
           }),
+        const SizedBox(height: AppSpacing.lg),
+        Text(
+          'Reseñas recientes',
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        if (_reviews.isEmpty)
+          const Card(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: Text('Aún no tienes reseñas de tus clientes.'),
+            ),
+          )
+        else
+          ..._reviews.take(5).map((review) => _ReviewTile(review: review)),
+      ],
+    );
+  }
+}
+
+class _ReviewTile extends StatelessWidget {
+  final _ReviewSummary review;
+
+  const _ReviewTile({required this.review});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    review.clientName,
+                    style: theme.textTheme.titleSmall,
+                  ),
+                ),
+                if (review.rating != null) _StarsRow(rating: review.rating!),
+              ],
+            ),
+            if (review.professionalName != null) ...[
+              const SizedBox(height: AppSpacing.xs),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Atención de ${review.professionalName}',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ),
+                  if (review.ratingProfessional != null)
+                    _StarsRow(rating: review.ratingProfessional!),
+                ],
+              ),
+            ],
+            if (review.tags.isNotEmpty) ...[
+              const SizedBox(height: AppSpacing.sm),
+              Wrap(
+                spacing: AppSpacing.sm,
+                runSpacing: AppSpacing.xs,
+                children: review.tags
+                    .map((tag) => _TagPill(label: tag))
+                    .toList(),
+              ),
+            ],
+            if (review.comment.isNotEmpty) ...[
+              const SizedBox(height: AppSpacing.sm),
+              Text(review.comment, style: theme.textTheme.bodySmall),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Fila de 5 estrellas rellenas según la calificación (1-5).
+class _StarsRow extends StatelessWidget {
+  final int rating;
+
+  const _StarsRow({required this.rating});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme.secondary;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(
+        5,
+        (index) => Icon(
+          index < rating ? Icons.star : Icons.star_border,
+          size: 14,
+          color: color,
+        ),
+      ),
+    );
+  }
+}
+
+/// Etiqueta de opinión rápida elegida por el cliente.
+class _TagPill extends StatelessWidget {
+  final String label;
+
+  const _TagPill({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: AppSpacing.xs,
+      ),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.secondaryContainer,
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+      ),
+      child: Text(
+        label,
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: theme.colorScheme.onSecondaryContainer,
+        ),
+      ),
+    );
+  }
+}
+
+/// Calificación que el cliente dejó en una cita concreta de la agenda.
+class _BookingReviewSummary extends StatelessWidget {
+  final _BookingReview review;
+
+  const _BookingReviewSummary({required this.review});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final ratings = [
+      if (review.rating != null) 'Negocio ${review.rating}/5',
+      if (review.ratingProfessional != null)
+        'Barbero ${review.ratingProfessional}/5',
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (ratings.isNotEmpty)
+          Row(
+            children: [
+              Icon(Icons.star, size: 14, color: theme.colorScheme.secondary),
+              const SizedBox(width: AppSpacing.xs),
+              Expanded(
+                child: Text(
+                  'Calificada · ${ratings.join(' · ')}',
+                  style: theme.textTheme.labelSmall,
+                ),
+              ),
+            ],
+          ),
+        if (review.tags.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.xs),
+          Wrap(
+            spacing: AppSpacing.xs,
+            runSpacing: AppSpacing.xs,
+            children: review.tags.map((tag) => _TagPill(label: tag)).toList(),
+          ),
+        ],
+        if (review.comment.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.xs),
+          Text(review.comment, style: theme.textTheme.bodySmall),
+        ],
       ],
     );
   }
@@ -606,6 +916,7 @@ class _BusinessAgendaScreenState extends State<BusinessAgendaScreen> {
           AppFormatters.parseApiDateTime(map['startAt']) ?? DateTime.now(),
       price: _readInt(map['price']) ?? _readInt(service?['price']) ?? 0,
       status: (map['status'] ?? 'pending').toString(),
+      review: _mapBookingReview(map['review']),
     );
   }
 
@@ -758,6 +1069,12 @@ class _BusinessAgendaScreenState extends State<BusinessAgendaScreen> {
                                           ),
                                         ),
                                       ],
+                                    ),
+                                  ],
+                                  if (booking.review != null) ...[
+                                    const SizedBox(height: AppSpacing.sm),
+                                    _BookingReviewSummary(
+                                      review: booking.review!,
                                     ),
                                   ],
                                 ],

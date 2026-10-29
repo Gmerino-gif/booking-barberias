@@ -15,6 +15,10 @@ class NearbyBarber {
   final String address;
   final String phone;
 
+  /// Logo del negocio (referencia `/uploads/...` o URL) que se muestra en el
+  /// listado de barberías cercanas.
+  final String? logo;
+
   const NearbyBarber({
     required this.id,
     required this.name,
@@ -23,6 +27,7 @@ class NearbyBarber {
     required this.rating,
     this.address = '',
     this.phone = '',
+    this.logo,
   });
 }
 

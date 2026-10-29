@@ -5,6 +5,7 @@ import { BookingSlotLock } from '../models/BookingSlotLock.js';
 import { Establishment } from '../models/Establishment.js';
 import { Service } from '../models/Service.js';
 import { Professional } from '../models/Professional.js';
+import { Review } from '../models/Review.js';
 import { getAvailableSlots } from '../services/availability.service.js';
 import type { AuthenticatedRequest } from '../middleware/auth.middleware.js';
 
@@ -253,6 +254,16 @@ export const getMyBookings = async (req: AuthenticatedRequest, res: Response): P
   }
 };
 
+/** Resumen de la reseña que el cliente dejó al servicio (si ya lo calificó). */
+const serializeBookingReview = (review: any) => ({
+  id: review._id?.toString?.() ?? null,
+  rating: review.rating ?? null,
+  ratingProfessional: review.ratingProfessional ?? null,
+  tags: review.tags ?? [],
+  comment: review.comment ?? '',
+  createdAt: review.createdAt ?? null,
+});
+
 export const getBusinessBookings = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const establishment = await Establishment.findOne({ ownerId: req.user!.id });
@@ -268,7 +279,26 @@ export const getBusinessBookings = async (req: AuthenticatedRequest, res: Respon
       .populate('serviceId', 'name durationMin price')
       .sort({ startAt: -1 });
 
-    res.status(200).json({ bookings: bookings.map((booking) => serializeBooking(booking.toObject())) });
+    // El negocio necesita ver la calificación que el cliente ya dejó en cada
+    // cita, junto con las etiquetas elegidas en el historial de servicios.
+    const reviews = bookings.length === 0
+      ? []
+      : await Review.find({ bookingId: { $in: bookings.map((booking) => booking._id) } }).select(
+        'bookingId rating ratingProfessional tags comment createdAt',
+      );
+    const reviewsByBooking = new Map(
+      reviews.map((review) => [review.bookingId?.toString() ?? '', review]),
+    );
+
+    res.status(200).json({
+      bookings: bookings.map((booking) => {
+        const review = reviewsByBooking.get(booking._id.toString());
+        return {
+          ...serializeBooking(booking.toObject()),
+          review: review ? serializeBookingReview(review) : null,
+        };
+      }),
+    });
   } catch {
     res.status(500).json({ message: 'Error al obtener las reservas del negocio' });
   }

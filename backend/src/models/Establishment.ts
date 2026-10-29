@@ -6,6 +6,10 @@ const establishmentSchema = new Schema(
     name: { type: String, required: true, trim: true, minlength: 2, maxlength: 100 },
     description: { type: String, trim: true, maxlength: 1000 },
     photos: [{ type: String }],
+    /** Banner de portada del perfil público (referencia `/uploads/...` o URL). */
+    banner: { type: String, trim: true, maxlength: 500 },
+    /** Logo/avatar del negocio (referencia `/uploads/...` o URL). */
+    logo: { type: String, trim: true, maxlength: 500 },
     address: { type: String, required: true, trim: true, maxlength: 200 },
     city: { type: String, required: true, trim: true, maxlength: 100 },
     phone: { type: String, required: true, trim: true, maxlength: 20 },

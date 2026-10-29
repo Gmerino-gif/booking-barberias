@@ -5,6 +5,9 @@ import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 
 import '../../../core/network/api_config.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/image_urls.dart';
+import '../../../core/widgets/image_edit_field.dart';
 import '../../auth/providers/auth_provider.dart';
 
 class _ProfessionalItem {
@@ -12,12 +15,18 @@ class _ProfessionalItem {
   final String name;
   final String specialty;
   final Set<String> serviceIds;
+  final String? photo;
+  final double rating;
+  final int reviewCount;
 
   const _ProfessionalItem({
     required this.id,
     required this.name,
     required this.specialty,
     required this.serviceIds,
+    this.photo,
+    this.rating = 0,
+    this.reviewCount = 0,
   });
 }
 
@@ -113,6 +122,11 @@ class _BusinessProfessionalsScreenState
                 id: (item['_id'] ?? item['id'] ?? '').toString(),
                 name: (item['name'] ?? '').toString(),
                 specialty: (item['specialty'] ?? '').toString(),
+                photo: (item['photo'] ?? '').toString().trim().isEmpty
+                    ? null
+                    : (item['photo'] ?? '').toString().trim(),
+                rating: (item['rating'] as num?)?.toDouble() ?? 0,
+                reviewCount: (item['reviewCount'] as num?)?.toInt() ?? 0,
                 serviceIds: ((item['services'] as List?) ?? const [])
                     .map(
                       (service) => service is Map<String, dynamic>
@@ -143,6 +157,8 @@ class _BusinessProfessionalsScreenState
       text: professional?.specialty ?? '',
     );
     final selectedServiceIds = professional?.serviceIds.toSet() ?? <String>{};
+    var photoRef = professional?.photo;
+    final authToken = context.read<AuthProvider>().accessToken;
     final save = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -169,6 +185,17 @@ class _BusinessProfessionalsScreenState
                     decoration: const InputDecoration(
                       labelText: 'Especialidad',
                     ),
+                  ),
+                  const SizedBox(height: 12),
+                  ImageEditField(
+                    label: 'Foto del profesional',
+                    value: photoRef,
+                    authToken: authToken,
+                    circular: true,
+                    height: 96,
+                    helperText: 'Se mostrará en la página de tu negocio.',
+                    onChanged: (value) =>
+                        setDialogState(() => photoRef = value),
                   ),
                   if (_services.isNotEmpty) ...[
                     const SizedBox(height: 12),
@@ -230,38 +257,26 @@ class _BusinessProfessionalsScreenState
       );
       return;
     }
-    final token = context.read<AuthProvider>().accessToken;
     final isEdit = professional != null;
     final professionalId = professional?.id;
     try {
       final uri = Uri.parse(
         '${ApiConfig.baseUrl}/professionals${isEdit ? '/$professionalId' : ''}',
       );
+      final payload = jsonEncode({
+        'name': name,
+        'specialty': specialty,
+        'services': selectedServiceIds.toList(),
+        // `''` limpia la foto: `parseImageRef` lo interpreta como "sin imagen".
+        'photo': photoRef ?? '',
+      });
+      final headers = {
+        'Authorization': 'Bearer $authToken',
+        'Content-Type': 'application/json',
+      };
       final response = isEdit
-          ? await http.put(
-              uri,
-              headers: {
-                'Authorization': 'Bearer $token',
-                'Content-Type': 'application/json',
-              },
-              body: jsonEncode({
-                'name': name,
-                'specialty': specialty,
-                'services': selectedServiceIds.toList(),
-              }),
-            )
-          : await http.post(
-              uri,
-              headers: {
-                'Authorization': 'Bearer $token',
-                'Content-Type': 'application/json',
-              },
-              body: jsonEncode({
-                'name': name,
-                'specialty': specialty,
-                'services': selectedServiceIds.toList(),
-              }),
-            );
+          ? await http.put(uri, headers: headers, body: payload)
+          : await http.post(uri, headers: headers, body: payload);
       if (!mounted) return;
       if (response.statusCode == 200 || response.statusCode == 201) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -343,6 +358,13 @@ class _BusinessProfessionalsScreenState
     }
   }
 
+  /// Resuelve la referencia de la foto a una imagen mostrable, o `null` para
+  /// que el [CircleAvatar] muestre el icono por defecto.
+  ImageProvider<Object>? _photoProvider(String? photo) {
+    final url = AppImageUrls.resolve(photo);
+    return url == null ? null : NetworkImage(url);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -371,14 +393,58 @@ class _BusinessProfessionalsScreenState
               children: _professionals
                   .map(
                     (professional) => ListTile(
-                      leading: const CircleAvatar(
-                        child: Icon(Icons.person_outline),
+                      leading: CircleAvatar(
+                        foregroundImage: _photoProvider(professional.photo),
+                        child: const Icon(Icons.person_outline),
                       ),
                       title: Text(professional.name),
-                      subtitle: Text(
-                        professional.specialty.isEmpty
-                            ? 'Sin especialidad'
-                            : professional.specialty,
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            professional.specialty.isEmpty
+                                ? 'Sin especialidad'
+                                : professional.specialty,
+                          ),
+                          if (professional.reviewCount > 0)
+                            Padding(
+                              padding: const EdgeInsets.only(
+                                top: AppSpacing.xs,
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.star,
+                                    size: 14,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.secondary,
+                                  ),
+                                  const SizedBox(width: AppSpacing.xs),
+                                  Text(
+                                    professional.rating.toStringAsFixed(1),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall
+                                        ?.copyWith(
+                                          fontWeight: AppTypography.bold,
+                                        ),
+                                  ),
+                                  Text(
+                                    ' (${professional.reviewCount})',
+                                    style: Theme.of(context).textTheme.bodySmall
+                                        ?.copyWith(
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.onSurfaceVariant,
+                                        ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
                       ),
                       trailing: PopupMenuButton<String>(
                         onSelected: (action) => action == 'edit'

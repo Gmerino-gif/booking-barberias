@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 
 import '../../../core/network/api_config.dart';
+import '../../../core/utils/image_urls.dart';
 import 'widgets/nearby_map.dart';
 
 class ClientHomeScreen extends StatefulWidget {
@@ -73,6 +74,13 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
 
   double _radians(double degrees) => degrees * math.pi / 180;
 
+  /// Logo del negocio resuelto a una imagen mostrable (o `null` para usar el
+  /// icono por defecto del [CircleAvatar]).
+  ImageProvider<Object>? _logoProvider(String? logo) {
+    final url = AppImageUrls.resolve(logo);
+    return url == null ? null : NetworkImage(url);
+  }
+
   void _onMapCenterChanged(LatLng center) {
     _mapLat = center.latitude;
     _mapLng = center.longitude;
@@ -120,6 +128,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
               rating: (item['rating'] as num?)?.toDouble() ?? 0,
               address: item['address'] as String? ?? '',
               phone: item['phone'] as String? ?? '',
+              logo: (item['logo'] as String?)?.trim(),
             );
           })
           .where((barber) => barber.id.isNotEmpty)
@@ -213,7 +222,10 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
             (barber) => Card(
               margin: const EdgeInsets.only(bottom: 8),
               child: ListTile(
-                leading: const CircleAvatar(child: Icon(Icons.content_cut)),
+                leading: CircleAvatar(
+                  foregroundImage: _logoProvider(barber.logo),
+                  child: const Icon(Icons.content_cut),
+                ),
                 title: Text(barber.name),
                 subtitle: Text(
                   barber.address.isEmpty ? 'Barbería cercana' : barber.address,

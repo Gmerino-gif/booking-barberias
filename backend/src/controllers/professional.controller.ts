@@ -3,6 +3,7 @@ import { Booking } from '../models/Booking.js';
 import { Establishment } from '../models/Establishment.js';
 import { Professional } from '../models/Professional.js';
 import { Service } from '../models/Service.js';
+import { parseImageRef, removeStoredImage } from '../utils/uploads.js';
 import type { AuthenticatedRequest } from '../middleware/auth.middleware.js';
 
 const getOwnedEstablishment = (ownerId: string) => Establishment.findOne({ ownerId });
@@ -48,8 +49,13 @@ export const createProfessional = async (req: AuthenticatedRequest, res: Respons
   const body = req.body as Record<string, unknown> | null;
   const name = typeof body?.name === 'string' ? body.name.trim() : '';
   const specialty = typeof body?.specialty === 'string' ? body.specialty.trim() : '';
+  const photoRef = parseImageRef(body?.photo);
   if (name.length < 2 || name.length > 80 || specialty.length > 100) {
     res.status(400).json({ message: 'Nombre o especialidad inválidos' });
+    return;
+  }
+  if (photoRef === null) {
+    res.status(400).json({ message: 'La foto del profesional no es válida' });
     return;
   }
   try {
@@ -63,7 +69,13 @@ export const createProfessional = async (req: AuthenticatedRequest, res: Respons
       res.status(400).json({ message: 'Uno o más servicios no pertenecen a tu establecimiento' });
       return;
     }
-    const professional = await Professional.create({ establishmentId: establishment._id, name, specialty, services });
+    const professional = await Professional.create({
+      establishmentId: establishment._id,
+      name,
+      specialty,
+      services,
+      ...(photoRef ? { photo: photoRef } : {}),
+    });
     res.status(201).json({ message: 'Profesional registrado', professional });
   } catch {
     res.status(500).json({ message: 'Error al registrar el profesional' });
@@ -106,7 +118,19 @@ export const updateProfessional = async (req: AuthenticatedRequest, res: Respons
       }
       professional.set('services', services);
     }
+    let replacedPhoto = '';
+    if (body?.photo !== undefined) {
+      const photoRef = parseImageRef(body.photo);
+      if (photoRef === null) {
+        res.status(400).json({ message: 'La foto del profesional no es válida' });
+        return;
+      }
+      const previousPhoto = professional.photo ?? '';
+      if (previousPhoto !== photoRef) replacedPhoto = previousPhoto;
+      professional.set('photo', photoRef);
+    }
     await professional.save();
+    if (replacedPhoto) await removeStoredImage(replacedPhoto);
     res.status(200).json({ message: 'Profesional actualizado', professional });
   } catch {
     res.status(500).json({ message: 'Error al actualizar el profesional' });

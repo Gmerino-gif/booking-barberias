@@ -8,9 +8,12 @@ import '../../../core/network/api_config.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../auth/providers/auth_provider.dart';
+import 'widgets/service_review_card.dart';
 
 class BookingModel {
   final String id;
+  final String establishmentId;
+  final String professionalId;
   final String establishmentName;
   final String serviceName;
   final String professionalName;
@@ -22,6 +25,8 @@ class BookingModel {
 
   const BookingModel({
     required this.id,
+    this.establishmentId = '',
+    this.professionalId = '',
     required this.establishmentName,
     required this.serviceName,
     required this.professionalName,
@@ -31,6 +36,12 @@ class BookingModel {
     required this.status,
     this.notes = '',
   });
+
+  /// Una cita completada puede calificarse desde el historial.
+  bool get canReview =>
+      status == 'completed' &&
+      id.isNotEmpty &&
+      establishmentId.isNotEmpty;
 }
 
 class MyBookingsScreen extends StatefulWidget {
@@ -47,11 +58,15 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
   String? _error;
   List<BookingModel> _bookings = const [];
 
+  /// Reseñas ya publicadas, indexadas por el id de la cita calificada.
+  Map<String, SubmittedReview> _reviewsByBooking = const {};
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _loadBookings();
+    _loadReviews();
   }
 
   @override
@@ -171,6 +186,92 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
     }
   }
 
+  /// Carga las reseñas del cliente para saber qué servicios ya calificó.
+  Future<void> _loadReviews() async {
+    final token = context.read<AuthProvider>().accessToken;
+    if (token == null || token.isEmpty) return;
+    try {
+      final response = await http
+          .get(
+            Uri.parse('${ApiConfig.baseUrl}/reviews/my'),
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Content-Type': 'application/json; charset=UTF-8',
+            },
+          )
+          .timeout(const Duration(seconds: 15));
+
+      if (!mounted || response.statusCode != 200) return;
+
+      final decoded = jsonDecode(response.body);
+      final items = decoded is Map<String, dynamic> && decoded['reviews'] is List
+          ? decoded['reviews'] as List
+          : <dynamic>[];
+
+      final byBooking = <String, SubmittedReview>{};
+      for (final item in items.whereType<Map<String, dynamic>>()) {
+        final bookingId = _readId(item['bookingId']);
+        if (bookingId == null || bookingId.isEmpty) continue;
+        byBooking[bookingId] = SubmittedReview.fromJson(item);
+      }
+      setState(() => _reviewsByBooking = byBooking);
+    } catch (_) {
+      // Las reseñas son secundarias: el historial sigue visible sin conexión.
+    }
+  }
+
+  /// Publica la reseña de una cita completada. Devuelve el mensaje de error o
+  /// `null` si se guardó correctamente.
+  Future<String?> _submitReview(
+    BookingModel booking,
+    ServiceReviewDraft draft,
+  ) async {
+    final token = context.read<AuthProvider>().accessToken;
+    if (token == null || token.isEmpty) {
+      return 'Inicia sesión para calificar tu servicio';
+    }
+    try {
+      final response = await http
+          .post(
+            Uri.parse('${ApiConfig.baseUrl}/reviews'),
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Content-Type': 'application/json; charset=UTF-8',
+            },
+            body: jsonEncode({
+              'bookingId': booking.id,
+              'establishmentId': booking.establishmentId,
+              if (booking.professionalId.isNotEmpty)
+                'professionalId': booking.professionalId,
+              if (draft.rating != null) 'rating': draft.rating,
+              if (draft.ratingProfessional != null)
+                'ratingProfessional': draft.ratingProfessional,
+              'tags': draft.tags,
+              'comment': draft.comment,
+            }),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      if (!mounted) return null;
+
+      if (response.statusCode == 201) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('¡Gracias por calificar tu servicio!')),
+        );
+        await _loadReviews();
+        return null;
+      }
+
+      final body = jsonDecode(response.body);
+      final message = body is Map<String, dynamic> && body['message'] is String
+          ? body['message'] as String
+          : 'No se pudo publicar tu reseña';
+      return message;
+    } catch (_) {
+      return 'No se pudo conectar para publicar tu reseña';
+    }
+  }
+
   BookingModel _mapBooking(dynamic item) {
     final map = item is Map<String, dynamic> ? item : <String, dynamic>{};
 
@@ -192,6 +293,10 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
 
     return BookingModel(
       id: (map['_id'] ?? map['id'] ?? '').toString(),
+      establishmentId:
+          _readId(establishment) ?? _readId(map['establishmentId']) ?? '',
+      professionalId:
+          _readId(professional) ?? _readId(map['professionalId']) ?? '',
       establishmentName:
           (establishment is Map<String, dynamic>
                   ? (establishment['name'] ??
@@ -223,6 +328,15 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
     if (value is num) return value.toInt();
     if (value is String) return int.tryParse(value);
     return null;
+  }
+
+  /// Id de un campo que puede venir como cadena o como documento poblado.
+  String? _readId(dynamic value) {
+    if (value is Map<String, dynamic>) {
+      return _readId(value['_id'] ?? value['id']);
+    }
+    final id = value?.toString().trim() ?? '';
+    return id.isEmpty ? null : id;
   }
 
   List<BookingModel> get _upcoming {
@@ -505,6 +619,16 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
                       ),
                   ],
                 ),
+                if (booking.canReview) ...[
+                  const SizedBox(height: 12),
+                  ServiceReviewCard(
+                    key: ValueKey('review-${booking.id}'),
+                    establishmentName: booking.establishmentName,
+                    professionalName: booking.professionalName,
+                    existing: _reviewsByBooking[booking.id],
+                    onSubmit: (draft) => _submitReview(booking, draft),
+                  ),
+                ],
               ],
             ),
           ),

@@ -26,8 +26,12 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Booking App usa la cámara para que puedas tomar la foto de tu negocio o de tus profesionales.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Booking App usa tu ubicación solo como sugerencia para colocar el pin de tu establecimiento. Puedes elegir el punto manualmente.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Booking App accede a tus fotos para que puedas elegir el logo, el banner o la foto de tus profesionales.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

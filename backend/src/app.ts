@@ -8,6 +8,8 @@ import favoriteRoutes from './routes/favorite.routes.js';
 import professionalRoutes from './routes/professional.routes.js';
 import reviewRoutes from './routes/review.routes.js';
 import serviceRoutes from './routes/service.routes.js';
+import uploadRoutes from './routes/upload.routes.js';
+import { UPLOADS_ROUTE_PREFIX, uploadsDirectory } from './utils/uploads.js';
 
 const app = express();
 
@@ -24,6 +26,14 @@ app.use(cors({
     callback(null, false);
   },
 }));
+// Archivos subidos (logos, banners y fotos de profesionales). Se registran antes
+// del parser JSON global: las subidas viajan en base64 y necesitan un límite mayor.
+app.use(
+  UPLOADS_ROUTE_PREFIX,
+  express.static(uploadsDirectory, { index: false, maxAge: '7d', fallthrough: true }),
+);
+app.use('/api/uploads', express.json({ limit: '8mb' }), uploadRoutes);
+
 app.use(express.json());
 
 // Endpoint de verificación (Healthcheck)
