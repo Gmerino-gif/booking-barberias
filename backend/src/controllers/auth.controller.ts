@@ -275,7 +275,21 @@ export const updateMe = async (req: AuthenticatedRequest, res: Response): Promis
   }
 
   const body = req.body as Record<string, unknown> | null;
-  const updates: { name?: string; phone?: string; email?: string } = {};
+  const updates: { name?: string; phone?: string } = {};
+
+  // El correo es el identificador de acceso de la cuenta y no se puede editar:
+  // si llega un correo distinto al registrado se rechaza la petición completa.
+  const requestedEmail =
+    body?.email === undefined
+      ? undefined
+      : typeof body.email === 'string'
+        ? body.email.trim().toLowerCase()
+        : '';
+
+  if (requestedEmail !== undefined && !isEmail(requestedEmail)) {
+    res.status(400).json({ message: 'Ingresa un correo electrónico válido' });
+    return;
+  }
 
   // Solo se actualizan los campos enviados, permitiendo editar el perfil parcialmente.
   if (body?.name !== undefined) {
@@ -296,33 +310,27 @@ export const updateMe = async (req: AuthenticatedRequest, res: Response): Promis
     updates.phone = phone;
   }
 
-  if (body?.email !== undefined) {
-    const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
-    if (!isEmail(email)) {
-      res.status(400).json({ message: 'Ingresa un correo electrónico válido' });
-      return;
-    }
-    updates.email = email;
-  }
-
-  if (Object.keys(updates).length === 0) {
+  if (Object.keys(updates).length === 0 && requestedEmail === undefined) {
     res.status(400).json({ message: 'No se enviaron datos para actualizar' });
     return;
   }
 
   try {
-    const current = await User.findById(req.user.id).select('email');
+    const current = await User.findById(req.user.id);
     if (!current) {
       res.status(404).json({ message: 'Usuario no encontrado' });
       return;
     }
 
-    if (updates.email !== undefined && updates.email !== current.email) {
-      const emailTaken = await User.exists({ email: updates.email, _id: { $ne: current._id } });
-      if (emailTaken) {
-        res.status(409).json({ message: 'Ya existe una cuenta con ese correo' });
-        return;
-      }
+    if (requestedEmail !== undefined && requestedEmail !== current.email) {
+      res.status(400).json({ message: 'El correo electrónico no puede modificarse' });
+      return;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      // Únicamente llegó el correo sin cambios: no hay nada que guardar.
+      res.status(400).json({ message: 'No se enviaron datos para actualizar' });
+      return;
     }
 
     const user = await User.findByIdAndUpdate(req.user.id, { $set: updates }, { returnDocument: 'after', runValidators: true });
@@ -331,11 +339,7 @@ export const updateMe = async (req: AuthenticatedRequest, res: Response): Promis
       return;
     }
     res.status(200).json({ message: 'Perfil actualizado', user: publicUser(user) });
-  } catch (error) {
-    if (typeof error === 'object' && error !== null && 'code' in error && error.code === 11000) {
-      res.status(409).json({ message: 'Ya existe una cuenta con ese correo' });
-      return;
-    }
+  } catch {
     res.status(500).json({ message: 'No se pudo actualizar el perfil' });
   }
 };

@@ -280,10 +280,12 @@ class AuthProvider extends ChangeNotifier {
   ///
   /// Solo se modifican los campos enviados, de modo que la pantalla de edición
   /// puede guardar cambios parciales sin perder el resto del perfil.
-  void updateProfile({String? name, String? phone, String? email}) {
+  ///
+  /// El correo electrónico no es modificable: es el identificador de acceso de
+  /// la cuenta y solo el servidor puede devolverlo (vía [applyUserPayload]).
+  void updateProfile({String? name, String? phone}) {
     if (name != null) _userName = name;
     if (phone != null) _userPhone = phone;
-    if (email != null) _userEmail = email;
     unawaited(_saveSession());
     notifyListeners();
   }

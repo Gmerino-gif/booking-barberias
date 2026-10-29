@@ -13,9 +13,13 @@ import '../../auth/providers/auth_provider.dart';
 
 /// Pantalla completa para editar los datos personales del usuario.
 ///
-/// Permite actualizar nombre, teléfono y correo (los mismos datos que se
-/// piden en el registro) contra `PATCH /auth/me`, y refleja la respuesta del
-/// servidor en [AuthProvider] para que el resto de la app vea los cambios.
+/// Permite actualizar el nombre y el teléfono contra `PATCH /auth/me` y
+/// refleja la respuesta del servidor en [AuthProvider] para que el resto de la
+/// app vea los cambios.
+///
+/// El correo electrónico se muestra como dato de solo lectura: es el
+/// identificador de acceso de la cuenta y el backend rechaza cualquier intento
+/// de modificarlo.
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
 
@@ -56,15 +60,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     return null;
   }
 
-  String? _validateEmail(String? value) {
-    final email = value?.trim() ?? '';
-    if (email.isEmpty) return 'Ingresa tu correo';
-    if (!RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(email)) {
-      return 'Correo inválido';
-    }
-    return null;
-  }
-
   String? _validatePhone(String? value) {
     final phone = value?.trim() ?? '';
     final digits = phone.replaceAll(RegExp(r'\D'), '');
@@ -90,12 +85,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
     final name = _nameCtrl.text.trim();
     final phone = _phoneCtrl.text.trim();
-    final email = _emailCtrl.text.trim().toLowerCase();
 
+    // El correo es el identificador de acceso y no se envía nunca al servidor:
+    // solo se pueden modificar el nombre y el celular.
     final patch = <String, dynamic>{};
     if (name != (auth.userName ?? '')) patch['name'] = name;
     if (phone != (auth.userPhone ?? '')) patch['phone'] = phone;
-    if (email != (auth.userEmail ?? '').toLowerCase()) patch['email'] = email;
 
     if (patch.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -125,7 +120,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         if (user is Map<String, dynamic>) {
           auth.applyUserPayload(user);
         } else {
-          auth.updateProfile(name: name, phone: phone, email: email);
+          auth.updateProfile(name: name, phone: phone);
         }
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Perfil actualizado correctamente')),
@@ -229,7 +224,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               ),
               const SizedBox(height: AppSpacing.xs),
               Text(
-                'Actualiza la información con la que creaste tu cuenta.',
+                'Actualiza tu nombre y tu número de celular.',
                 style: theme.textTheme.bodySmall,
               ),
               const SizedBox(height: AppSpacing.md),
@@ -247,30 +242,33 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               TextFormField(
                 controller: _phoneCtrl,
                 keyboardType: TextInputType.phone,
-                textInputAction: TextInputAction.next,
+                textInputAction: TextInputAction.done,
                 decoration: const InputDecoration(
                   labelText: 'Celular',
                   prefixIcon: Icon(Icons.phone_outlined),
                 ),
                 validator: _validatePhone,
+                onFieldSubmitted: (_) {
+                  if (!_isSaving) _save();
+                },
               ),
               const SizedBox(height: AppSpacing.md),
               TextFormField(
                 controller: _emailCtrl,
+                readOnly: true,
                 keyboardType: TextInputType.emailAddress,
                 autocorrect: false,
-                textInputAction: TextInputAction.done,
                 decoration: const InputDecoration(
                   labelText: 'Correo electrónico',
                   prefixIcon: Icon(Icons.email_outlined),
+                  suffixIcon: Icon(Icons.lock_outline),
+                  helperText: 'El correo no se puede modificar',
                 ),
-                validator: _validateEmail,
-                onFieldSubmitted: (_) => _isSaving ? null : _save(),
               ),
               const SizedBox(height: AppSpacing.sm),
               Text(
-                'El correo es tu identificador de acceso: si lo cambias, deberás '
-                'usar el nuevo correo la próxima vez que inicies sesión.',
+                'El correo es tu identificador de acceso. Contacta a soporte si '
+                'necesitas cambiarlo.',
                 style: theme.textTheme.bodySmall,
               ),
               if (_serverError != null) ...[
