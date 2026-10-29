@@ -5,6 +5,8 @@ import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 
 import '../../../core/network/api_config.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/formatters.dart';
 import '../../auth/providers/auth_provider.dart';
 
 class BookingModel {
@@ -175,9 +177,8 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
     final establishment = map['establishmentId'];
     final service = map['serviceId'];
     final professional = map['professionalId'];
-    final startAtRaw = map['startAt'];
     final startAt =
-        DateTime.tryParse(startAtRaw?.toString() ?? '') ?? DateTime.now();
+        AppFormatters.parseApiDateTime(map['startAt']) ?? DateTime.now();
     final duration =
         _readInt(map['durationMin']) ??
         (service is Map<String, dynamic>
@@ -246,67 +247,26 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
     return history;
   }
 
-  static const _weekdays = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
-  static const _months = [
-    'Ene',
-    'Feb',
-    'Mar',
-    'Abr',
-    'May',
-    'Jun',
-    'Jul',
-    'Ago',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dic',
-  ];
+  String _formatDate(DateTime date) => AppFormatters.date(date);
 
-  String _formatDate(DateTime date) {
-    return '${_weekdays[date.weekday - 1]} ${date.day} ${_months[date.month - 1]} ${date.year}';
-  }
+  String _formatTime(DateTime date) => AppFormatters.time(date);
 
-  String _formatTime(DateTime date) {
-    final hour = date.hour.toString().padLeft(2, '0');
-    final minute = date.minute.toString().padLeft(2, '0');
-    return '$hour:$minute';
-  }
-
-  String _formatPrice(int value) {
-    final raw = value.toString();
-    final buffer = StringBuffer();
-    for (var index = 0; index < raw.length; index++) {
-      if (index > 0 && (raw.length - index) % 3 == 0) {
-        buffer.write('.');
-      }
-      buffer.write(raw[index]);
-    }
-    return '\$${buffer.toString()}';
-  }
+  String _formatPrice(int value) => AppFormatters.currency(value);
 
   ({Color color, String label, IconData icon}) _getStatusInfo(String status) {
-    switch (status) {
-      case 'pending':
-        return (color: Colors.orange, label: 'Pendiente', icon: Icons.schedule);
-      case 'confirmed':
-        return (
-          color: Colors.green,
-          label: 'Confirmada',
-          icon: Icons.check_circle,
-        );
-      case 'completed':
-        return (color: Colors.blue, label: 'Completada', icon: Icons.done_all);
-      case 'cancelled':
-        return (color: Colors.red, label: 'Cancelada', icon: Icons.cancel);
-      case 'no_show':
-        return (
-          color: Colors.grey,
-          label: 'No asistió',
-          icon: Icons.person_off,
-        );
-      default:
-        return (color: Colors.grey, label: status, icon: Icons.info);
-    }
+    const icons = <String, IconData>{
+      'pending': Icons.schedule,
+      'confirmed': Icons.check_circle,
+      'completed': Icons.done_all,
+      'cancelled': Icons.cancel,
+      'canceled': Icons.cancel,
+      'no_show': Icons.person_off,
+    };
+    return (
+      color: AppColors.forStatus(status),
+      label: AppFormatters.statusLabel(status),
+      icon: icons[status.toLowerCase()] ?? Icons.info,
+    );
   }
 
   @override
@@ -381,22 +341,19 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
             size: 72,
             color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: AppSpacing.md),
           Text(
             isUpcoming
                 ? 'No tienes reservas próximas'
                 : 'Aún no tienes historial',
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            style: theme.textTheme.titleMedium,
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: AppSpacing.xs),
           Text(
             isUpcoming
                 ? 'Cuando reserves una cita aparecerá aquí'
                 : 'Tus reservas anteriores aparecerán aquí',
-            style: TextStyle(
-              fontSize: 13,
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
+            style: theme.textTheme.bodySmall,
             textAlign: TextAlign.center,
           ),
         ],
@@ -435,9 +392,8 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
                 const SizedBox(width: 6),
                 Text(
                   statusInfo.label.toUpperCase(),
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    fontWeight: AppTypography.bold,
                     color: statusInfo.color,
                     letterSpacing: 0.5,
                   ),
@@ -445,10 +401,7 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
                 const Spacer(),
                 Text(
                   '#$shortId',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
+                  style: theme.textTheme.labelSmall,
                 ),
               ],
             ),
@@ -460,10 +413,7 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
               children: [
                 Text(
                   booking.serviceName,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: theme.textTheme.titleMedium,
                 ),
                 const SizedBox(height: 4),
                 Row(
@@ -477,10 +427,7 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
                     Expanded(
                       child: Text(
                         booking.establishmentName,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
+                        style: theme.textTheme.bodySmall,
                       ),
                     ),
                   ],
@@ -522,10 +469,8 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
                         Expanded(
                           child: Text(
                             booking.notes,
-                            style: TextStyle(
-                              fontSize: 12,
+                            style: theme.textTheme.bodySmall?.copyWith(
                               fontStyle: FontStyle.italic,
-                              color: theme.colorScheme.onSurfaceVariant,
                             ),
                           ),
                         ),
@@ -539,9 +484,7 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
                   children: [
                     Text(
                       _formatPrice(booking.price),
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
+                      style: theme.textTheme.titleLarge?.copyWith(
                         color: theme.colorScheme.primary,
                       ),
                     ),
@@ -555,9 +498,9 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
                           ),
                           minimumSize: const Size(0, 32),
                         ),
-                        child: const Text(
+                        child: Text(
                           'Cancelar',
-                          style: TextStyle(fontSize: 12),
+                          style: theme.textTheme.labelMedium,
                         ),
                       ),
                   ],
@@ -575,7 +518,7 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
       children: [
         Icon(icon, size: 14, color: theme.colorScheme.onSurfaceVariant),
         const SizedBox(width: 6),
-        Expanded(child: Text(text, style: const TextStyle(fontSize: 13))),
+        Expanded(child: Text(text, style: theme.textTheme.bodyMedium)),
       ],
     );
   }

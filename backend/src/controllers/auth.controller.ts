@@ -269,22 +269,73 @@ export const getMe = async (req: AuthenticatedRequest, res: Response): Promise<v
 };
 
 export const updateMe = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  if (!req.user) {
+    res.status(401).json({ message: 'Acceso no autorizado' });
+    return;
+  }
+
   const body = req.body as Record<string, unknown> | null;
-  const name = typeof body?.name === 'string' ? body.name.trim() : '';
-  const phone = typeof body?.phone === 'string' ? body.phone.trim() : '';
-  if (name.length < 2 || name.length > 80 || !isValidPhoneNumber(phone)) {
-    res.status(400).json({ message: 'Nombre o teléfono inválido' });
+  const updates: { name?: string; phone?: string; email?: string } = {};
+
+  // Solo se actualizan los campos enviados, permitiendo editar el perfil parcialmente.
+  if (body?.name !== undefined) {
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    if (name.length < 2 || name.length > 80) {
+      res.status(400).json({ message: 'El nombre debe tener entre 2 y 80 caracteres' });
+      return;
+    }
+    updates.name = name;
+  }
+
+  if (body?.phone !== undefined) {
+    const phone = typeof body.phone === 'string' ? body.phone.trim() : '';
+    if (!isValidPhoneNumber(phone)) {
+      res.status(400).json({ message: 'El número celular debe tener entre 7 y 15 dígitos' });
+      return;
+    }
+    updates.phone = phone;
+  }
+
+  if (body?.email !== undefined) {
+    const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+    if (!isEmail(email)) {
+      res.status(400).json({ message: 'Ingresa un correo electrónico válido' });
+      return;
+    }
+    updates.email = email;
+  }
+
+  if (Object.keys(updates).length === 0) {
+    res.status(400).json({ message: 'No se enviaron datos para actualizar' });
     return;
   }
 
   try {
-    const user = await User.findByIdAndUpdate(req.user!.id, { $set: { name, phone } }, { returnDocument: 'after', runValidators: true });
+    const current = await User.findById(req.user.id).select('email');
+    if (!current) {
+      res.status(404).json({ message: 'Usuario no encontrado' });
+      return;
+    }
+
+    if (updates.email !== undefined && updates.email !== current.email) {
+      const emailTaken = await User.exists({ email: updates.email, _id: { $ne: current._id } });
+      if (emailTaken) {
+        res.status(409).json({ message: 'Ya existe una cuenta con ese correo' });
+        return;
+      }
+    }
+
+    const user = await User.findByIdAndUpdate(req.user.id, { $set: updates }, { returnDocument: 'after', runValidators: true });
     if (!user) {
       res.status(404).json({ message: 'Usuario no encontrado' });
       return;
     }
     res.status(200).json({ message: 'Perfil actualizado', user: publicUser(user) });
-  } catch {
+  } catch (error) {
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === 11000) {
+      res.status(409).json({ message: 'Ya existe una cuenta con ese correo' });
+      return;
+    }
     res.status(500).json({ message: 'No se pudo actualizar el perfil' });
   }
 };

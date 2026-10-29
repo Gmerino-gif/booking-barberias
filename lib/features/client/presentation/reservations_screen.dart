@@ -6,7 +6,10 @@ import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 
 import '../../../core/network/api_config.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/formatters.dart';
 import '../../auth/providers/auth_provider.dart';
+import 'establishment_detail_screen.dart' show ServiceItem;
 
 class ProfessionalOption {
   final String id;
@@ -48,6 +51,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
   String? _error;
 
   List<ProfessionalOption> _professionals = const [];
+  List<ServiceItem> _services = const [];
   List<String> _availableHours = const [];
   final Map<String, DateTime> _slotStartAt = {};
   bool _isLoadingAvailability = false;
@@ -62,6 +66,167 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
   void initState() {
     super.initState();
     _loadProfessionals();
+    _loadServices();
+  }
+
+  Future<List<ServiceItem>> _fetchServices() async {
+    final response = await http
+        .get(
+          Uri.parse(
+            '${ApiConfig.baseUrl}/services?establishmentId=${widget.establishmentId}',
+          ),
+          headers: const {'Content-Type': 'application/json; charset=UTF-8'},
+        )
+        .timeout(const Duration(seconds: 15));
+    if (response.statusCode != 200) {
+      throw Exception('No se pudieron cargar los servicios');
+    }
+    final decoded = jsonDecode(response.body);
+    final rawList = decoded is Map<String, dynamic>
+        ? decoded['services']
+        : null;
+    final items = rawList is List ? rawList : const <dynamic>[];
+    return items.whereType<Map<String, dynamic>>().map((item) {
+      final rawCategory = item['category'] ?? 'General';
+      return ServiceItem(
+        id: (item['_id'] ?? item['id'] ?? '').toString(),
+        name: (item['name'] ?? 'Servicio').toString(),
+        description: (item['description'] ?? '').toString(),
+        price: (item['price'] is num ? item['price'] : 0).toInt(),
+        durationMin: (item['durationMin'] is num ? item['durationMin'] : 30)
+            .toInt(),
+        category: rawCategory.toString(),
+      );
+    }).toList();
+  }
+
+  Future<void> _loadServices() async {
+    try {
+      final services = await _fetchServices();
+      if (!mounted) return;
+      setState(() => _services = services);
+    } catch (_) {
+      // Cambiar de servicio es opcional: si falla seguimos con el seleccionado.
+    }
+  }
+
+  /// Vuelve al detalle del establecimiento para elegir otro servicio.
+  void _goBackToEstablishment() {
+    context.go(
+      '/client/establishment/${widget.establishmentId}'
+      '?name=${Uri.encodeComponent(widget.establishmentName)}',
+    );
+  }
+
+  /// Abre el selector de servicios para cambiar el servicio de la reserva.
+  Future<void> _changeService() async {
+    var services = _services;
+    if (services.isEmpty) {
+      try {
+        services = await _fetchServices();
+        if (!mounted) return;
+        setState(() => _services = services);
+      } catch (error) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error.toString().replaceFirst('Exception: ', '')),
+          ),
+        );
+        return;
+      }
+    }
+    if (!mounted) return;
+
+    if (services.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Esta barbería aún no tiene servicios disponibles'),
+        ),
+      );
+      return;
+    }
+
+    final selected = await showModalBottomSheet<ServiceItem>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        final theme = Theme.of(sheetContext);
+        return SafeArea(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(sheetContext).size.height * 0.7,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                  child: Text(
+                    'Elige otro servicio',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: services.length,
+                    itemBuilder: (_, index) {
+                      final service = services[index];
+                      final isCurrent = service.id == widget.serviceId;
+                      return ListTile(
+                        enabled: !isCurrent,
+                        leading: Icon(
+                          isCurrent
+                              ? Icons.check_circle
+                              : Icons.content_cut_outlined,
+                          color: isCurrent
+                              ? theme.colorScheme.primary
+                              : theme.colorScheme.onSurfaceVariant,
+                        ),
+                        title: Text(service.name),
+                        subtitle: Text(
+                          '${service.durationMin} min · '
+                          '${AppFormatters.currency(service.price)}',
+                        ),
+                        trailing: isCurrent
+                            ? Text(
+                                'Actual',
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: theme.colorScheme.primary,
+                                ),
+                              )
+                            : null,
+                        onTap: () => Navigator.of(sheetContext).pop(service),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (selected == null || !mounted) return;
+    if (selected.id == widget.serviceId) return;
+
+    // Reabrimos el flujo con el nuevo servicio, conservando el establecimiento.
+    context.go(
+      '/client/reservas'
+      '?establishmentId=${widget.establishmentId}'
+      '&establishmentName=${Uri.encodeComponent(widget.establishmentName)}'
+      '&serviceId=${selected.id}'
+      '&serviceName=${Uri.encodeComponent(selected.name)}'
+      '&price=${selected.price}'
+      '&durationMin=${selected.durationMin}',
+    );
   }
 
   Future<void> _loadProfessionals() async {
@@ -166,11 +331,9 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
           : const <dynamic>[];
       final slots = <String, DateTime>{};
       for (final raw in rawSlots.whereType<String>()) {
-        final local = DateTime.tryParse(raw)?.toLocal();
+        final local = AppFormatters.parseApiDateTime(raw);
         if (local == null) continue;
-        final label =
-            '${(local.hour % 12 == 0 ? 12 : local.hour % 12).toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')} ${local.hour >= 12 ? 'PM' : 'AM'}';
-        slots[label] = local;
+        slots[AppFormatters.hourLabel(local)] = local;
       }
       if (!mounted || requestId != _availabilityRequestId) return;
       setState(() {
@@ -240,7 +403,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
         builder: (dialogContext) => AlertDialog(
           title: const Row(
             children: [
-              Icon(Icons.check_circle, color: Colors.green, size: 28),
+              Icon(Icons.check_circle, color: AppColors.success, size: 28),
               SizedBox(width: 8),
               Text('¡Reserva creada!'),
             ],
@@ -296,36 +459,6 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     }
   }
 
-  static const _weekdays = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
-  static const _months = [
-    'Enero',
-    'Febrero',
-    'Marzo',
-    'Abril',
-    'Mayo',
-    'Junio',
-    'Julio',
-    'Agosto',
-    'Septiembre',
-    'Octubre',
-    'Noviembre',
-    'Diciembre',
-  ];
-  static const _monthsShort = [
-    'Ene',
-    'Feb',
-    'Mar',
-    'Abr',
-    'May',
-    'Jun',
-    'Jul',
-    'Ago',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dic',
-  ];
-
   String _formatDayLabel(DateTime date) {
     final now = DateTime.now();
     if (date.year == now.year &&
@@ -339,23 +472,31 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
         date.day == tomorrow.day) {
       return 'Mañana';
     }
-    return '${_weekdays[date.weekday - 1]}, ${date.day} de ${_months[date.month - 1]}';
+    return AppFormatters.date(date, includeYear: false);
   }
 
-  String _formatFullDate(DateTime date) {
-    return '${_weekdays[date.weekday - 1]} ${date.day} ${_monthsShort[date.month - 1]} ${date.year}';
-  }
+  String _formatFullDate(DateTime date) => AppFormatters.date(date);
 
-  String _formatPrice(int value) {
-    final raw = value.toString();
-    final buffer = StringBuffer();
-    for (var index = 0; index < raw.length; index++) {
-      if (index > 0 && (raw.length - index) % 3 == 0) {
-        buffer.write('.');
-      }
-      buffer.write(raw[index]);
-    }
-    return '\$${buffer.toString()}';
+  String _formatPrice(int value) => AppFormatters.currency(value);
+
+  /// Cabecera común de la pantalla (volver + cambiar servicio).
+  AppBar _buildAppBar({bool allowChangeService = true}) {
+    return AppBar(
+      leading: IconButton(
+        tooltip: 'Volver',
+        icon: const Icon(Icons.arrow_back),
+        onPressed: _goBackToEstablishment,
+      ),
+      title: Text(widget.establishmentName, overflow: TextOverflow.ellipsis),
+      actions: [
+        if (allowChangeService)
+          IconButton(
+            tooltip: 'Cambiar servicio',
+            icon: const Icon(Icons.swap_horiz),
+            onPressed: _changeService,
+          ),
+      ],
+    );
   }
 
   @override
@@ -371,14 +512,14 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
 
     if (_isLoading) {
       return Scaffold(
-        appBar: AppBar(title: Text(widget.establishmentName)),
+        appBar: _buildAppBar(),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
 
     if (_error != null) {
       return Scaffold(
-        appBar: AppBar(title: Text(widget.establishmentName)),
+        appBar: _buildAppBar(),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
@@ -389,7 +530,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: Text(widget.establishmentName)),
+      appBar: _buildAppBar(),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -415,8 +556,8 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
               onPressed: canConfirm ? _confirmReservation : null,
               child: Text(
                 _isSubmitting ? 'CONFIRMANDO...' : 'CONFIRMAR RESERVA',
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
+                style: theme.textTheme.labelLarge?.copyWith(
+                  fontWeight: AppTypography.bold,
                   letterSpacing: 0.5,
                 ),
               ),
@@ -429,80 +570,102 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
   }
 
   Widget _buildStepTitle(String number, String title) {
+    final theme = Theme.of(context);
     return Row(
       children: [
         Container(
           width: 28,
           height: 28,
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.primary,
+            color: theme.colorScheme.primary,
             shape: BoxShape.circle,
           ),
           alignment: Alignment.center,
           child: Text(
             number,
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onPrimary,
-              fontWeight: FontWeight.bold,
-              fontSize: 14,
+            style: theme.textTheme.labelLarge?.copyWith(
+              color: theme.colorScheme.onPrimary,
+              fontWeight: AppTypography.bold,
             ),
           ),
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: AppSpacing.sm + 2),
         Text(
           title,
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: AppTypography.bold,
+          ),
         ),
       ],
     );
   }
 
   Widget _buildServiceCard(ThemeData theme) {
+    final onPrimary = theme.colorScheme.onPrimary;
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
         color: theme.colorScheme.primary,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.store, color: Colors.white, size: 32),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.establishmentName,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
+          Row(
+            children: [
+              Icon(Icons.store, color: onPrimary, size: 32),
+              const SizedBox(width: AppSpacing.md - 4),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.establishmentName,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: onPrimary,
+                        fontWeight: AppTypography.bold,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      '${widget.serviceName} · '
+                      '${_formatPrice(widget.servicePrice)}',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: onPrimary.withValues(alpha: 0.85),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.secondary,
+                  borderRadius: BorderRadius.circular(AppRadius.lg + 4),
+                ),
+                child: Text(
+                  '${widget.serviceDurationMin} min',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.onSecondary,
+                    fontWeight: AppTypography.bold,
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  '${widget.serviceName} · ${_formatPrice(widget.servicePrice)}',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.85),
-                    fontSize: 13,
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.secondary,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              '${widget.serviceDurationMin} min',
-              style: const TextStyle(
-                color: Colors.black,
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
+          // Acceso directo para cambiar de servicio sin salir del flujo.
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: _changeService,
+              icon: const Icon(Icons.swap_horiz, size: 18),
+              label: const Text('Cambiar servicio'),
+              style: TextButton.styleFrom(
+                foregroundColor: onPrimary,
+                visualDensity: VisualDensity.compact,
               ),
             ),
           ),
@@ -511,15 +674,17 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     );
   }
 
+
+
   Widget _buildDateSelectorCard(ThemeData theme) {
     return InkWell(
       onTap: _pickDate,
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(AppRadius.md),
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.md),
         decoration: BoxDecoration(
           color: theme.colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(AppRadius.md),
           border: Border.all(
             color: theme.colorScheme.primary.withValues(alpha: 0.3),
             width: 1.5,
@@ -531,33 +696,31 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
                 color: theme.colorScheme.primary,
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(AppRadius.sm + 2),
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.calendar_month,
-                color: Colors.white,
+                color: theme.colorScheme.onPrimary,
                 size: 24,
               ),
             ),
-            const SizedBox(width: 14),
+            const SizedBox(width: AppSpacing.md - 2),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     'Fecha seleccionada',
-                    style: TextStyle(
-                      fontSize: 12,
+                    style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
-                      fontWeight: FontWeight.w500,
+                      fontWeight: AppTypography.medium,
                     ),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     _formatDayLabel(_selectedDate),
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: AppTypography.bold,
                     ),
                   ),
                 ],
@@ -603,16 +766,18 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
               color: selected
                   ? theme.colorScheme.secondary
                   : theme.colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(AppRadius.sm + 2),
               border: selected
                   ? Border.all(color: theme.colorScheme.primary, width: 2)
                   : null,
             ),
             child: Text(
               hour,
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                color: selected ? Colors.black : theme.colorScheme.onSurface,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: AppTypography.semiBold,
+                color: selected
+                    ? theme.colorScheme.onSecondary
+                    : theme.colorScheme.onSurface,
               ),
             ),
           ),
@@ -644,7 +809,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                 color: selected
                     ? theme.colorScheme.primary
                     : theme.colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(AppRadius.md),
                 border: selected
                     ? Border.all(color: theme.colorScheme.secondary, width: 2)
                     : null,
@@ -662,30 +827,34 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                       professional.name.isNotEmpty
                           ? professional.name.substring(0, 1).toUpperCase()
                           : '?',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: selected ? Colors.black : Colors.white,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: AppTypography.bold,
+                        color: selected
+                            ? theme.colorScheme.onSecondary
+                            : theme.colorScheme.onPrimary,
                       ),
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: AppSpacing.sm),
                   Text(
                     professional.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                      color: selected ? Colors.white : null,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: AppTypography.bold,
+                      color: selected
+                          ? theme.colorScheme.onPrimary
+                          : theme.colorScheme.onSurface,
                     ),
                   ),
                   Text(
                     professional.specialty,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: selected ? Colors.white70 : Colors.grey,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: selected
+                          ? theme.colorScheme.onPrimary.withValues(alpha: 0.8)
+                          : theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
                 ],
@@ -702,52 +871,55 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     ProfessionalOption? selectedProfessional,
   ) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(AppRadius.md),
         border: Border.all(color: theme.colorScheme.outlineVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Resumen de tu reserva',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: AppTypography.bold,
+            ),
           ),
           const SizedBox(height: 12),
           _buildSummaryRow(
             Icons.calendar_today,
             _formatFullDate(_selectedDate),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           _buildSummaryRow(
             Icons.access_time,
             _selectedHour ?? 'Sin hora seleccionada',
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           _buildSummaryRow(
             Icons.person_outline,
             selectedProfessional?.name ?? 'Sin profesional',
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           _buildSummaryRow(
             Icons.timer_outlined,
             '${widget.serviceDurationMin} min',
           ),
-          const Divider(height: 24),
+          const Divider(height: AppSpacing.lg),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
+              Text(
                 'Total',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: AppTypography.bold,
+                ),
               ),
               Text(
                 _formatPrice(widget.servicePrice),
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: AppTypography.bold,
                   color: theme.colorScheme.primary,
                 ),
               ),
@@ -759,11 +931,14 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
   }
 
   Widget _buildSummaryRow(IconData icon, String text) {
+    final theme = Theme.of(context);
     return Row(
       children: [
-        Icon(icon, size: 18, color: Colors.grey.shade600),
-        const SizedBox(width: 8),
-        Expanded(child: Text(text, style: const TextStyle(fontSize: 14))),
+        Icon(icon, size: 18, color: theme.colorScheme.onSurfaceVariant),
+        const SizedBox(width: AppSpacing.sm),
+        Expanded(
+          child: Text(text, style: theme.textTheme.bodyMedium),
+        ),
       ],
     );
   }

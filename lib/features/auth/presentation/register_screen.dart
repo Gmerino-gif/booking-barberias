@@ -9,6 +9,7 @@ import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 
 import '../../../core/network/api_config.dart';
+import '../../../core/theme/app_theme.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -434,10 +435,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+        ),
         title: const Row(
           children: [
-            Icon(Icons.check_circle, color: Colors.green, size: 28),
+            Icon(Icons.check_circle, color: AppColors.success, size: 28),
             SizedBox(width: 8),
             Text('¡Cuenta creada!'),
           ],
@@ -502,18 +505,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         color: theme.colorScheme.primary,
                       ),
                       const SizedBox(height: 12),
-                      const Text(
+                      Text(
                         'Únete a Booking App',
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          fontWeight: AppTypography.bold,
                         ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         'Reserva tu próximo corte en segundos',
-                        style: TextStyle(
-                          fontSize: 13,
+                        style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
                       ),
@@ -524,7 +525,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 Container(
                   decoration: BoxDecoration(
                     color: theme.colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(AppRadius.md),
                   ),
                   padding: const EdgeInsets.all(4),
                   child: Row(
@@ -707,7 +708,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         SizedBox(
                           height: 250,
                           child: ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(AppRadius.md),
                             child: FlutterMap(
                               key: _mapKey,
                               mapController: _mapController,
@@ -755,7 +756,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                           onPanUpdate: _onPinDrag,
                                           child: const Icon(
                                             Icons.location_pin,
-                                            color: Colors.red,
+                                            color: AppColors.danger,
                                             size: 48,
                                           ),
                                         ),
@@ -912,12 +913,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 FilledButton.icon(
                   onPressed: _isLoading ? null : _submit,
                   icon: _isLoading
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 18,
                           height: 18,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: Colors.white,
+                            color: theme.colorScheme.onPrimary,
                           ),
                         )
                       : const Icon(Icons.person_add_alt_1_outlined),
@@ -952,7 +953,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
           color: selected ? theme.colorScheme.primary : Colors.transparent,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(AppRadius.sm + 2),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -960,14 +961,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
             Icon(
               icon,
               size: 18,
-              color: selected ? Colors.white : theme.colorScheme.onSurface,
+              color: selected
+                  ? theme.colorScheme.onPrimary
+                  : theme.colorScheme.onSurface,
             ),
             const SizedBox(width: 6),
             Text(
               label,
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                color: selected ? Colors.white : theme.colorScheme.onSurface,
+              style: theme.textTheme.labelLarge?.copyWith(
+                fontWeight: AppTypography.semiBold,
+                color: selected
+                    ? theme.colorScheme.onPrimary
+                    : theme.colorScheme.onSurface,
               ),
             ),
           ],

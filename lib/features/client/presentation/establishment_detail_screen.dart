@@ -6,6 +6,8 @@ import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 
 import '../../../core/network/api_config.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/formatters.dart';
 import '../../auth/providers/auth_provider.dart';
 
 class EstablishmentDetail {
@@ -323,15 +325,10 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
   // ============================================================
   // Utilidades
   // ============================================================
-  String _formatPrice(int value) {
-    final str = value.toString();
-    final buf = StringBuffer();
-    for (int i = 0; i < str.length; i++) {
-      if (i > 0 && (str.length - i) % 3 == 0) buf.write('.');
-      buf.write(str[i]);
-    }
-    return '\$${buf.toString()}';
-  }
+  String _formatPrice(int value) => AppFormatters.currency(value);
+
+  /// Vuelve al listado principal de barberías.
+  void _goBack() => context.go('/client');
 
   Future<void> _toggleFavorite() async {
     final token = context.read<AuthProvider>().accessToken;
@@ -400,7 +397,7 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
                     onPressed: () => setDialogState(() => rating = index + 1),
                     icon: Icon(
                       index < rating ? Icons.star : Icons.star_border,
-                      color: Colors.amber,
+                      color: AppColors.accent,
                     ),
                   ),
                 ),
@@ -470,7 +467,14 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
 
     if (_error != null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Detalle de barbería')),
+        appBar: AppBar(
+          leading: IconButton(
+            tooltip: 'Volver',
+            icon: const Icon(Icons.arrow_back),
+            onPressed: _goBack,
+          ),
+          title: const Text('Detalle de barbería'),
+        ),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
@@ -486,12 +490,19 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
           SliverAppBar(
             expandedHeight: 220,
             pinned: true,
-            iconTheme: const IconThemeData(color: Colors.white),
+            leading: IconButton(
+              tooltip: 'Volver',
+              icon: const Icon(Icons.arrow_back),
+              onPressed: _goBack,
+            ),
+            iconTheme: IconThemeData(color: theme.colorScheme.onPrimary),
             actions: [
               IconButton(
                 icon: Icon(
                   _isFavorite ? Icons.favorite : Icons.favorite_border,
-                  color: _isFavorite ? Colors.red : Colors.white,
+                  color: _isFavorite
+                      ? AppColors.danger
+                      : theme.colorScheme.onPrimary,
                 ),
                 onPressed: _toggleFavorite,
               ),
@@ -499,10 +510,9 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
             flexibleSpace: FlexibleSpaceBar(
               title: Text(
                 _establishment.name,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  color: theme.colorScheme.onPrimary,
+                  fontWeight: AppTypography.bold,
                 ),
               ),
               background: Stack(
@@ -522,7 +532,7 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
                     child: Icon(
                       Icons.store,
                       size: 100,
-                      color: Colors.white.withValues(alpha: 0.3),
+                      color: theme.colorScheme.onPrimary.withValues(alpha: 0.3),
                     ),
                   ),
                   Container(
@@ -532,7 +542,7 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
                         end: Alignment.bottomCenter,
                         colors: [
                           Colors.transparent,
-                          Colors.black.withValues(alpha: 0.7),
+                          AppColors.primary.withValues(alpha: 0.7),
                         ],
                       ),
                     ),
@@ -563,10 +573,10 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
                             durationMin: _services.first.durationMin,
                           ),
                     icon: const Icon(Icons.calendar_month),
-                    label: const Text(
+                    label: Text(
                       'RESERVAR CITA',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        fontWeight: AppTypography.bold,
                         letterSpacing: 0.5,
                       ),
                     ),
@@ -624,7 +634,7 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
             color: theme.colorScheme.secondary.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(AppRadius.sm),
           ),
           child: Row(
             children: [
@@ -632,16 +642,14 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
               const SizedBox(width: 4),
               Text(
                 '${_establishment.rating}',
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: AppTypography.bold,
                 ),
               ),
               const SizedBox(width: 4),
               Text(
                 '(${_establishment.reviewCount})',
-                style: TextStyle(
-                  fontSize: 12,
+                style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),
@@ -661,8 +669,7 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
               Expanded(
                 child: Text(
                   '${_establishment.address}, ${_establishment.city}',
-                  style: TextStyle(
-                    fontSize: 13,
+                  style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
                   maxLines: 2,
@@ -680,15 +687,16 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'Sobre nosotros',
-          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: AppTypography.bold,
+          ),
         ),
         const SizedBox(height: 6),
         Text(
           _establishment.description,
-          style: TextStyle(
-            fontSize: 13,
+          style: theme.textTheme.bodySmall?.copyWith(
             height: 1.5,
             color: theme.colorScheme.onSurfaceVariant,
           ),
@@ -701,10 +709,12 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
     return Row(
       children: [
         Icon(icon, color: theme.colorScheme.primary, size: 22),
-        const SizedBox(width: 8),
+        const SizedBox(width: AppSpacing.sm),
         Text(
           title,
-          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+          style: theme.textTheme.titleLarge?.copyWith(
+            fontWeight: AppTypography.bold,
+          ),
         ),
       ],
     );
@@ -726,9 +736,8 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: Text(
                 entry.key.toUpperCase(),
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  fontWeight: AppTypography.bold,
                   letterSpacing: 1.2,
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -747,7 +756,7 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(AppRadius.md),
         border: Border.all(color: theme.colorScheme.outlineVariant),
       ),
       child: Row(
@@ -758,17 +767,15 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
               children: [
                 Text(
                   service.name,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: AppTypography.bold,
                   ),
                 ),
                 const SizedBox(height: 4),
                 if (service.description.isNotEmpty)
                   Text(
                     service.description,
-                    style: TextStyle(
-                      fontSize: 12,
+                    style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
                     maxLines: 2,
@@ -785,8 +792,7 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
                     const SizedBox(width: 4),
                     Text(
                       '${service.durationMin} min',
-                      style: TextStyle(
-                        fontSize: 12,
+                      style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
                     ),
@@ -801,9 +807,8 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
             children: [
               Text(
                 _formatPrice(service.price),
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: AppTypography.bold,
                   color: theme.colorScheme.primary,
                 ),
               ),
@@ -821,7 +826,12 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 14),
                     minimumSize: const Size(0, 32),
                   ),
-                  child: const Text('Reservar', style: TextStyle(fontSize: 12)),
+                  child: Text(
+                    'Reservar',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onPrimary,
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -845,7 +855,7 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: theme.colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(AppRadius.md),
               border: Border.all(color: theme.colorScheme.outlineVariant),
             ),
             child: Column(
@@ -857,27 +867,24 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
                   backgroundColor: theme.colorScheme.primary,
                   child: Text(
                     p.name.substring(0, 1),
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      fontSize: 18,
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: AppTypography.bold,
+                      color: theme.colorScheme.onPrimary,
                     ),
                   ),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   p.name,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: AppTypography.bold,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(
                   p.specialty,
-                  style: TextStyle(
-                    fontSize: 11,
+                  style: theme.textTheme.labelSmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
                   maxLines: 1,
@@ -904,7 +911,7 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(AppRadius.md),
         border: Border.all(color: theme.colorScheme.outlineVariant),
       ),
       child: Column(
@@ -917,10 +924,9 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
                 backgroundColor: theme.colorScheme.primary,
                 child: Text(
                   review.userName.substring(0, 1),
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                    fontSize: 14,
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    fontWeight: AppTypography.bold,
+                    color: theme.colorScheme.onPrimary,
                   ),
                 ),
               ),
@@ -931,15 +937,13 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
                   children: [
                     Text(
                       review.userName,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: AppTypography.bold,
                       ),
                     ),
                     Text(
                       review.timeAgo,
-                      style: TextStyle(
-                        fontSize: 11,
+                      style: theme.textTheme.labelSmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
                     ),
@@ -960,8 +964,7 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
           const SizedBox(height: 8),
           Text(
             review.comment,
-            style: TextStyle(
-              fontSize: 13,
+            style: theme.textTheme.bodySmall?.copyWith(
               height: 1.4,
               color: theme.colorScheme.onSurface,
             ),
@@ -976,7 +979,7 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(AppRadius.md),
         border: Border.all(color: theme.colorScheme.outlineVariant),
       ),
       child: Column(
@@ -1000,7 +1003,7 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
       children: [
         Icon(icon, size: 18, color: theme.colorScheme.primary),
         const SizedBox(width: 10),
-        Expanded(child: Text(text, style: const TextStyle(fontSize: 13))),
+        Expanded(child: Text(text, style: theme.textTheme.bodySmall)),
       ],
     );
   }

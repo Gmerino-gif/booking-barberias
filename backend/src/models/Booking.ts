@@ -11,6 +11,9 @@ const bookingSchema = new Schema(
     serviceId: { type: Schema.Types.ObjectId, ref: 'Service', required: true },
     startAt: { type: Date, required: true },
     endAt: { type: Date, required: true },
+    // Offset (en minutos) del cliente respecto a UTC al agendar la cita.
+    // Permite reconstruir la hora local exacta que el usuario eligió.
+    timeZoneOffsetMinutes: { type: Number, default: 0, min: -14 * 60, max: 14 * 60 },
     status: { type: String, enum: BOOKING_STATUSES, default: 'pending' },
     price: { type: Number, required: true, min: 0 },
     notes: { type: String, trim: true, maxlength: 500 },

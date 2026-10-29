@@ -5,6 +5,8 @@ import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 
 import '../../../core/network/api_config.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/formatters.dart';
 import '../../auth/providers/auth_provider.dart';
 
 class _BookingSummary {
@@ -160,7 +162,6 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
   }
 
   _BookingSummary _mapBooking(Map<String, dynamic> map) {
-    final startAtRaw = map['startAt'];
     final service = map['serviceId'] is Map<String, dynamic>
         ? map['serviceId'] as Map<String, dynamic>
         : null;
@@ -178,7 +179,7 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
           .toString(),
       professionalName: (professional?['name'] ?? 'Profesional').toString(),
       startAt:
-          DateTime.tryParse(startAtRaw?.toString() ?? '') ?? DateTime.now(),
+          AppFormatters.parseApiDateTime(map['startAt']) ?? DateTime.now(),
       price: _readInt(map['price']) ?? _readInt(service?['price']) ?? 0,
       status: (map['status'] ?? 'pending').toString(),
     );
@@ -214,42 +215,12 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
     return value is String ? value : null;
   }
 
-  String _formatCurrency(int value) {
-    final raw = value.toString();
-    final buffer = StringBuffer();
-    for (var index = 0; index < raw.length; index++) {
-      if (index > 0 && (raw.length - index) % 3 == 0) {
-        buffer.write('.');
-      }
-      buffer.write(raw[index]);
-    }
-    return '\$${buffer.toString()}';
-  }
+  String _formatCurrency(int value) => AppFormatters.currency(value);
 
-  String _formatTime(DateTime date) {
-    final hour = date.hour.toString().padLeft(2, '0');
-    final minute = date.minute.toString().padLeft(2, '0');
-    return '$hour:$minute';
-  }
+  String _formatTime(DateTime date) => AppFormatters.time(date);
 
-  String _formatDate(DateTime date) {
-    final weekdays = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
-    final months = [
-      'Ene',
-      'Feb',
-      'Mar',
-      'Abr',
-      'May',
-      'Jun',
-      'Jul',
-      'Ago',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dic',
-    ];
-    return '${weekdays[date.weekday - 1]} ${date.day} ${months[date.month - 1]}';
-  }
+  String _formatDate(DateTime date) =>
+      AppFormatters.date(date, includeYear: false);
 
   List<_BookingSummary> get _upcomingBookings {
     final now = DateTime.now();
@@ -269,11 +240,23 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
     }).length;
   }
 
-  int get _todaysIncome {
+  /// Revenue = sum of every *completed* service booked at this business.
+  ///
+  /// Pending, confirmed, cancelled and no-show bookings are not earnings yet,
+  /// so they must never be added to the total.
+  int get _completedRevenue {
+    return _bookings
+        .where((booking) => booking.status == 'completed')
+        .fold<int>(0, (sum, booking) => sum + booking.price);
+  }
+
+  /// Same figure but restricted to today's completed services.
+  int get _todaysCompletedRevenue {
     final today = DateTime.now();
     return _bookings
         .where((booking) {
-          return booking.startAt.year == today.year &&
+          return booking.status == 'completed' &&
+              booking.startAt.year == today.year &&
               booking.startAt.month == today.month &&
               booking.startAt.day == today.day;
         })
@@ -286,20 +269,10 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
   }
 
   ({Color color, String label}) _getStatusInfo(String status) {
-    switch (status) {
-      case 'pending':
-        return (color: Colors.orange, label: 'Pendiente');
-      case 'confirmed':
-        return (color: Colors.green, label: 'Confirmada');
-      case 'completed':
-        return (color: Colors.blue, label: 'Completada');
-      case 'cancelled':
-        return (color: Colors.red, label: 'Cancelada');
-      case 'no_show':
-        return (color: Colors.grey, label: 'No asistió');
-      default:
-        return (color: Colors.grey, label: status);
-    }
+    return (
+      color: AppColors.forStatus(status),
+      label: AppFormatters.statusLabel(status),
+    );
   }
 
   @override
@@ -322,15 +295,18 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
     final nextBooking = _nextBookingDate;
 
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(AppSpacing.md),
       children: [
         Text(
           'Hola, $_businessName 👋',
           style: Theme.of(context).textTheme.headlineSmall,
         ),
-        const SizedBox(height: 4),
-        const Text('Resumen del negocio'),
-        const SizedBox(height: 16),
+        const SizedBox(height: AppSpacing.xs),
+        Text(
+          'Resumen del negocio',
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+        const SizedBox(height: AppSpacing.md),
         Row(
           children: [
             Expanded(
@@ -344,7 +320,8 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
             Expanded(
               child: _KpiCard(
                 title: 'Ingresos',
-                value: _formatCurrency(_todaysIncome),
+                value: _formatCurrency(_completedRevenue),
+                subtitle: 'Hoy: ${_formatCurrency(_todaysCompletedRevenue)}',
                 icon: Icons.attach_money,
               ),
             ),
@@ -373,9 +350,9 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
           ],
         ),
         const SizedBox(height: 24),
-        const Text(
+        Text(
           'Próximas reservas',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+          style: Theme.of(context).textTheme.titleLarge,
         ),
         const SizedBox(height: 8),
         if (_upcomingBookings.isEmpty)
@@ -531,7 +508,6 @@ class _BusinessAgendaScreenState extends State<BusinessAgendaScreen> {
   }
 
   _BookingSummary _mapBooking(Map<String, dynamic> map) {
-    final startAtRaw = map['startAt'];
     final service = map['serviceId'] is Map<String, dynamic>
         ? map['serviceId'] as Map<String, dynamic>
         : null;
@@ -549,7 +525,7 @@ class _BusinessAgendaScreenState extends State<BusinessAgendaScreen> {
           .toString(),
       professionalName: (professional?['name'] ?? 'Profesional').toString(),
       startAt:
-          DateTime.tryParse(startAtRaw?.toString() ?? '') ?? DateTime.now(),
+          AppFormatters.parseApiDateTime(map['startAt']) ?? DateTime.now(),
       price: _readInt(map['price']) ?? _readInt(service?['price']) ?? 0,
       status: (map['status'] ?? 'pending').toString(),
     );
@@ -575,46 +551,16 @@ class _BusinessAgendaScreenState extends State<BusinessAgendaScreen> {
     return value is String ? value : null;
   }
 
-  String _formatDate(DateTime date) {
-    final weekdays = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
-    final months = [
-      'Ene',
-      'Feb',
-      'Mar',
-      'Abr',
-      'May',
-      'Jun',
-      'Jul',
-      'Ago',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dic',
-    ];
-    return '${weekdays[date.weekday - 1]} ${date.day} ${months[date.month - 1]}';
-  }
+  String _formatDate(DateTime date) =>
+      AppFormatters.date(date, includeYear: false);
 
-  String _formatTime(DateTime date) {
-    final hour = date.hour.toString().padLeft(2, '0');
-    final minute = date.minute.toString().padLeft(2, '0');
-    return '$hour:$minute';
-  }
+  String _formatTime(DateTime date) => AppFormatters.time(date);
 
   ({Color color, String label}) _getStatusInfo(String status) {
-    switch (status) {
-      case 'pending':
-        return (color: Colors.orange, label: 'Pendiente');
-      case 'confirmed':
-        return (color: Colors.green, label: 'Confirmada');
-      case 'completed':
-        return (color: Colors.blue, label: 'Completada');
-      case 'cancelled':
-        return (color: Colors.red, label: 'Cancelada');
-      case 'no_show':
-        return (color: Colors.grey, label: 'No asistió');
-      default:
-        return (color: Colors.grey, label: status);
-    }
+    return (
+      color: AppColors.forStatus(status),
+      label: AppFormatters.statusLabel(status),
+    );
   }
 
   @override
@@ -642,13 +588,10 @@ class _BusinessAgendaScreenState extends State<BusinessAgendaScreen> {
     final dates = grouped.keys.toList();
 
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(AppSpacing.md),
       children: [
-        const Text(
-          'Agenda',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
-        ),
-        const SizedBox(height: 16),
+        Text('Agenda', style: Theme.of(context).textTheme.headlineSmall),
+        const SizedBox(height: AppSpacing.md),
         if (dates.isEmpty)
           const Card(
             child: Padding(
@@ -668,10 +611,7 @@ class _BusinessAgendaScreenState extends State<BusinessAgendaScreen> {
                   children: [
                     Text(
                       date,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
+                      style: Theme.of(context).textTheme.titleMedium,
                     ),
                     const SizedBox(height: 12),
                     ...list.map((booking) {
@@ -680,8 +620,10 @@ class _BusinessAgendaScreenState extends State<BusinessAgendaScreen> {
                         margin: const EdgeInsets.only(bottom: 10),
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Colors.grey.withValues(alpha: 0.04),
-                          borderRadius: BorderRadius.circular(12),
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(AppRadius.md),
                         ),
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -705,9 +647,9 @@ class _BusinessAgendaScreenState extends State<BusinessAgendaScreen> {
                                 children: [
                                   Text(
                                     booking.clientName,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                    ),
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.titleSmall,
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
@@ -731,9 +673,9 @@ class _BusinessAgendaScreenState extends State<BusinessAgendaScreen> {
                                 const SizedBox(height: 8),
                                 Text(
                                   '${booking.price} COP',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                                  style: Theme.of(
+                                    context,
+                                  ).textTheme.titleSmall,
                                 ),
                                 if (booking.status == 'pending' ||
                                     booking.status == 'confirmed')
@@ -907,17 +849,7 @@ class _BusinessServicesScreenState extends State<BusinessServicesScreen> {
     return value is String ? value : null;
   }
 
-  String _formatCurrency(int value) {
-    final raw = value.toString();
-    final buffer = StringBuffer();
-    for (var index = 0; index < raw.length; index++) {
-      if (index > 0 && (raw.length - index) % 3 == 0) {
-        buffer.write('.');
-      }
-      buffer.write(raw[index]);
-    }
-    return '\$${buffer.toString()}';
-  }
+  String _formatCurrency(int value) => AppFormatters.currency(value);
 
   Future<void> _editService([_ServiceSummary? service]) async {
     final nameController = TextEditingController(text: service?.name ?? '');
@@ -1036,11 +968,11 @@ class _BusinessServicesScreenState extends State<BusinessServicesScreen> {
     }
 
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(AppSpacing.md),
       children: [
-        const Text(
+        Text(
           'Servicios del negocio',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+          style: Theme.of(context).textTheme.headlineSmall,
         ),
         const SizedBox(height: 8),
         Align(alignment: Alignment.centerRight, child: FilledButton.icon(onPressed: () => _editService(), icon: const Icon(Icons.add), label: const Text('Agregar servicio'))),
@@ -1074,7 +1006,10 @@ class _BusinessServicesScreenState extends State<BusinessServicesScreen> {
                   child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
                     Text(_formatCurrency(service.price)),
                     const SizedBox(height: 4),
-                    Text('${service.durationMin} min', style: const TextStyle(fontSize: 12)),
+                    Text(
+                      '${service.durationMin} min',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                     const Icon(Icons.more_horiz, size: 18),
                   ]),
                 ),
@@ -1089,30 +1024,41 @@ class _BusinessServicesScreenState extends State<BusinessServicesScreen> {
 class _KpiCard extends StatelessWidget {
   final String title;
   final String value;
+  final String? subtitle;
   final IconData icon;
 
   const _KpiCard({
     required this.title,
     required this.value,
     required this.icon,
+    this.subtitle,
   });
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.md),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon),
+            Icon(icon, color: theme.colorScheme.primary),
             const SizedBox(height: 12),
             Text(
               value,
-              style: Theme.of(context).textTheme.headlineSmall
-                  ?.copyWith(fontWeight: FontWeight.bold),
+              style: theme.textTheme.headlineSmall,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-            Text(title, style: const TextStyle(fontSize: 12)),
+            Text(title, style: theme.textTheme.bodySmall),
+            if (subtitle != null)
+              Text(
+                subtitle!,
+                style: theme.textTheme.labelSmall,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
           ],
         ),
       ),

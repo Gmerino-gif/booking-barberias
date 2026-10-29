@@ -131,12 +131,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                     FilledButton(
                       onPressed: _isLoading ? null : _submit,
                       child: _isLoading
-                          ? const SizedBox(
+                          ? SizedBox(
                               width: 20,
                               height: 20,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                color: Colors.white,
+                                color: Theme.of(context).colorScheme.onPrimary,
                               ),
                             )
                           : const Text('ENVIAR CÓDIGO'),
@@ -367,12 +367,12 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                     FilledButton(
                       onPressed: _isLoading ? null : _submit,
                       child: _isLoading
-                          ? const SizedBox(
+                          ? SizedBox(
                               width: 20,
                               height: 20,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                color: Colors.white,
+                                color: Theme.of(context).colorScheme.onPrimary,
                               ),
                             )
                           : const Text('RESTABLECER CONTRASEÑA'),

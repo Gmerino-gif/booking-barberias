@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/theme/app_theme.dart';
 import '../../auth/providers/auth_provider.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -37,16 +38,18 @@ class _SplashScreenState extends State<SplashScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
+    final theme = Theme.of(context);
+
+    return Scaffold(
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.content_cut, size: 80),
-            SizedBox(height: 16),
-            Text('Booking App', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-            SizedBox(height: 32),
-            CircularProgressIndicator(),
+            Icon(Icons.content_cut, size: 80, color: theme.colorScheme.primary),
+            const SizedBox(height: AppSpacing.md),
+            Text('Booking App', style: theme.textTheme.headlineMedium),
+            const SizedBox(height: AppSpacing.xl),
+            const CircularProgressIndicator(),
           ],
         ),
       ),

@@ -191,9 +191,9 @@ class _BusinessProfessionalsScreenState
                         }),
                       ),
                     ),
-                    const Text(
+                    Text(
                       'Si no seleccionas servicios, podrá atenderlos todos.',
-                      style: TextStyle(fontSize: 12),
+                      style: Theme.of(dialogContext).textTheme.bodySmall,
                     ),
                   ],
                 ],

@@ -111,6 +111,7 @@ export const createBooking = async (req: AuthenticatedRequest, res: Response): P
         serviceId,
         startAt,
         endAt,
+        timeZoneOffsetMinutes: utcOffsetMinutes,
         price: service.price,
         notes: typeof body?.notes === 'string' ? body.notes.trim() : '',
       });
@@ -231,6 +232,7 @@ const serializeBooking = (booking: any) => ({
   status: booking.status,
   startAt: booking.startAt,
   endAt: booking.endAt,
+  timeZoneOffsetMinutes: booking.timeZoneOffsetMinutes ?? 0,
   notes: booking.notes ?? '',
 });
 

@@ -276,9 +276,21 @@ class AuthProvider extends ChangeNotifier {
     _refreshToken = null;
   }
 
-  void updateProfile({required String name, required String phone}) {
-    _userName = name;
-    _userPhone = phone;
+  /// Actualiza los datos del usuario autenticado en memoria y en almacenamiento.
+  ///
+  /// Solo se modifican los campos enviados, de modo que la pantalla de edición
+  /// puede guardar cambios parciales sin perder el resto del perfil.
+  void updateProfile({String? name, String? phone, String? email}) {
+    if (name != null) _userName = name;
+    if (phone != null) _userPhone = phone;
+    if (email != null) _userEmail = email;
+    unawaited(_saveSession());
+    notifyListeners();
+  }
+
+  /// Refresca el usuario a partir del `user` devuelto por la API.
+  void applyUserPayload(Map<String, dynamic> user) {
+    _setUser(user);
     unawaited(_saveSession());
     notifyListeners();
   }

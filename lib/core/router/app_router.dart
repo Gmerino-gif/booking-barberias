@@ -14,6 +14,7 @@ import '../../features/client/shell/client_shell.dart';
 import '../../features/splash/presentation/splash_screen.dart';
 import '../../features/client/presentation/reservations_screen.dart';
 import '../../features/client/presentation/establishment_detail_screen.dart';
+import '../../features/client/presentation/edit_profile_screen.dart';
 import '../../features/client/presentation/profile_screen.dart';
 import '../../features/client/presentation/search_screen.dart';
 import '../../features/client/presentation/favorites_screen.dart';
@@ -117,6 +118,10 @@ class AppRouter {
           GoRoute(
             path: '/client/profile',
             builder: (_, _) => const ProfileScreen(),
+          ),
+          GoRoute(
+            path: '/client/profile/edit',
+            builder: (_, _) => const EditProfileScreen(),
           ),
         ],
       ),

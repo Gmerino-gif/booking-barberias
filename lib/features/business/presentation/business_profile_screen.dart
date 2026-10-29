@@ -4,12 +4,12 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/network/api_config.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../auth/providers/auth_provider.dart';
 
 class BusinessProfileScreen extends StatefulWidget {
@@ -477,24 +477,18 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Mi negocio'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.go('/business'),
-        ),
-      ),
-      body: SafeArea(
-        child: _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : SingleChildScrollView(
-                padding: const EdgeInsets.all(20),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
+    // `BusinessShell` already provides the AppBar for this tab-root route, so
+    // this screen renders only its body (no nested Scaffold / duplicate header).
+    return SafeArea(
+      child: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
                       Text(
                         'Información del negocio',
                         style: theme.textTheme.headlineSmall?.copyWith(
@@ -720,7 +714,7 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
                                               onPanUpdate: _onPinDrag,
                                               child: const Icon(
                                                 Icons.location_pin,
-                                                color: Colors.red,
+                                                color: AppColors.danger,
                                                 size: 48,
                                               ),
                                             ),
@@ -797,12 +791,12 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
                       FilledButton.icon(
                         onPressed: _isSaving ? null : _save,
                         icon: _isSaving
-                            ? const SizedBox(
+                            ? SizedBox(
                                 width: 18,
                                 height: 18,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
-                                  color: Colors.white,
+                                  color: Theme.of(context).colorScheme.onPrimary,
                                 ),
                               )
                             : const Icon(Icons.save_outlined),
@@ -814,7 +808,6 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
                   ),
                 ),
               ),
-      ),
     );
   }
 }

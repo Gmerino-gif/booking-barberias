@@ -34,8 +34,9 @@ class BusinessShell extends StatelessWidget {
         title: Text(_tabs[index].$3),
         actions: [
           IconButton(
+            tooltip: 'Cerrar sesión',
             icon: const Icon(Icons.logout),
-            onPressed: () => context.read<AuthProvider>().logout(),
+            onPressed: () => _logout(context),
           ),
         ],
       ),
@@ -48,5 +49,11 @@ class BusinessShell extends StatelessWidget {
             .toList(),
       ),
     );
+  }
+
+  Future<void> _logout(BuildContext context) async {
+    await context.read<AuthProvider>().logout();
+    if (!context.mounted) return;
+    context.go('/login');
   }
 }

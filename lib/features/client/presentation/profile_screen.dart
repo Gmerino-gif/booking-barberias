@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/network/api_config.dart';
 import '../../../core/modelos/user_role.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../auth/providers/auth_provider.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -64,91 +65,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  Future<void> _editProfile() async {
-    final auth = context.read<AuthProvider>();
-    final nameController = TextEditingController(text: auth.userName ?? '');
-    final phoneController = TextEditingController(text: auth.userPhone ?? '');
-    final accepted = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Editar perfil'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              maxLength: 80,
-              decoration: const InputDecoration(labelText: 'Nombre'),
-            ),
-            TextField(
-              controller: phoneController,
-              keyboardType: TextInputType.phone,
-              maxLength: 20,
-              decoration: const InputDecoration(labelText: 'Teléfono'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Guardar'),
-          ),
-        ],
-      ),
-    );
-    if (accepted != true || !mounted) {
-      nameController.dispose();
-      phoneController.dispose();
-      return;
-    }
-    final name = nameController.text.trim();
-    final phone = phoneController.text.trim();
-    nameController.dispose();
-    phoneController.dispose();
-    if (name.length < 2 || phone.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Ingresa un nombre y teléfono válidos')),
-      );
-      return;
-    }
-    final token = auth.accessToken;
-    if (token == null) return;
-    try {
-      final response = await http.patch(
-        Uri.parse('${ApiConfig.baseUrl}/auth/me'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({'name': name, 'phone': phone}),
-      );
-      if (!mounted) return;
-      if (response.statusCode == 200) {
-        auth.updateProfile(name: name, phone: phone);
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Perfil actualizado')));
-      } else {
-        final decoded = jsonDecode(response.body);
-        final message =
-            decoded is Map<String, dynamic> && decoded['message'] is String
-            ? decoded['message'] as String
-            : 'No se pudo actualizar el perfil';
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(message)));
-      }
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('No se pudo conectar para actualizar el perfil'),
-          ),
-        );
-      }
-    }
+  /// Abre la pantalla completa de edición de perfil y ajustes.
+  Future<void> _openEditProfile() async {
+    await context.push('/client/profile/edit');
+    if (mounted) _loadStats();
   }
 
   void _showSettings() {
@@ -158,12 +78,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
       builder: (dialogContext) => AlertDialog(
         title: const Text('Configuración de cuenta'),
         content: Text(
-          'Correo de acceso: ${auth.userEmail ?? 'No disponible'}\n\nEl correo es el identificador de inicio de sesión. Puedes actualizar tu nombre y teléfono desde Editar perfil.',
+          'Correo de acceso: ${auth.userEmail ?? 'No disponible'}\n\n'
+          'El correo es el identificador de inicio de sesión. Puedes '
+          'actualizar tu nombre, teléfono y correo desde Editar perfil '
+          'y ajustes.',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Cerrar'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              _openEditProfile();
+            },
+            child: const Text('Editar datos'),
           ),
         ],
       ),
@@ -206,24 +136,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _logout() async {
     final auth = context.read<AuthProvider>();
+    final theme = Theme.of(context);
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+        ),
         title: const Text('Cerrar sesión'),
         content: const Text('¿Estás seguro que quieres cerrar sesión?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Cancelar'),
           ),
           FilledButton(
             onPressed: () async {
-              Navigator.pop(context);
+              Navigator.pop(dialogContext);
               await auth.logout();
               if (mounted) context.go('/login');
             },
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            style: FilledButton.styleFrom(
+              backgroundColor: theme.colorScheme.error,
+            ),
             child: const Text('Cerrar sesión'),
           ),
         ],
@@ -273,32 +208,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
           backgroundColor: theme.colorScheme.primary,
           child: Text(
             name.isNotEmpty ? name.substring(0, 1).toUpperCase() : '?',
-            style: const TextStyle(
-              fontSize: 40,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
+            style: theme.textTheme.headlineLarge?.copyWith(
+              color: theme.colorScheme.onPrimary,
             ),
           ),
         ),
-        const SizedBox(height: 16),
-        Text(
-          name,
-          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 4),
+        const SizedBox(height: AppSpacing.md),
+        Text(name, style: theme.textTheme.headlineSmall),
+        const SizedBox(height: AppSpacing.xs),
         Text(
           email,
-          style: TextStyle(
-            fontSize: 14,
+          style: theme.textTheme.bodyMedium?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
         if (phone != null && phone.isNotEmpty) ...[
-          const SizedBox(height: 4),
+          const SizedBox(height: AppSpacing.xs),
           Text(
             phone,
-            style: TextStyle(
-              fontSize: 14,
+            style: theme.textTheme.bodyMedium?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
@@ -312,9 +240,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           child: Text(
             _getRoleLabel(role),
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
+            style: theme.textTheme.labelSmall?.copyWith(
+              fontWeight: AppTypography.bold,
               color: theme.colorScheme.secondary,
               letterSpacing: 0.5,
             ),
@@ -380,17 +307,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
       children: [
         Text(
           value,
-          style: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.bold,
+          style: theme.textTheme.headlineSmall?.copyWith(
             color: theme.colorScheme.primary,
           ),
         ),
         const SizedBox(height: 2),
         Text(
           label,
-          style: TextStyle(
-            fontSize: 12,
+          style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
@@ -426,9 +350,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _buildMenuItem(
             theme,
             icon: Icons.person_outline,
-            title: 'Editar perfil',
-            subtitle: 'Cambiar nombre, foto, teléfono',
-            onTap: _editProfile,
+            title: 'Editar perfil y ajustes',
+            subtitle: 'Cambiar nombre, teléfono y correo',
+            onTap: _openEditProfile,
           ),
           const Divider(height: 1, indent: 60),
           _buildMenuItem(
@@ -468,14 +392,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
         child: Icon(icon, color: theme.colorScheme.primary, size: 20),
       ),
-      title: Text(
-        title,
-        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-      ),
+      title: Text(title, style: theme.textTheme.titleSmall),
       subtitle: Text(
         subtitle,
-        style: TextStyle(
-          fontSize: 12,
+        style: theme.textTheme.bodySmall?.copyWith(
           color: theme.colorScheme.onSurfaceVariant,
         ),
       ),
@@ -488,24 +408,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildLogoutButton(ThemeData theme) {
+    final danger = theme.colorScheme.error;
     return SizedBox(
       width: double.infinity,
       child: OutlinedButton.icon(
         onPressed: _logout,
-        icon: const Icon(Icons.logout, color: Colors.red),
-        label: const Text(
+        icon: Icon(Icons.logout, color: danger),
+        label: Text(
           'CERRAR SESIÓN',
-          style: TextStyle(
-            color: Colors.red,
-            fontWeight: FontWeight.bold,
+          style: theme.textTheme.labelLarge?.copyWith(
+            color: danger,
+            fontWeight: AppTypography.bold,
             letterSpacing: 0.5,
           ),
         ),
         style: OutlinedButton.styleFrom(
           padding: const EdgeInsets.symmetric(vertical: 14),
-          side: const BorderSide(color: Colors.red),
+          side: BorderSide(color: danger),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(AppRadius.md),
           ),
         ),
       ),

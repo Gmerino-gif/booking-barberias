@@ -165,9 +165,9 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
         ),
         const SizedBox(height: 16),
 
-        const Text(
+        Text(
           'Mapa de barberías',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+          style: Theme.of(context).textTheme.titleLarge,
         ),
         const SizedBox(height: 8),
         NearbyMap(
@@ -183,9 +183,9 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
           },
         ),
         const SizedBox(height: 20),
-        const Text(
+        Text(
           'Barberías cercanas',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+          style: Theme.of(context).textTheme.titleLarge,
         ),
         const SizedBox(height: 8),
         if (_isLoading)
