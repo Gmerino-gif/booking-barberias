@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:provider/provider.dart';
 
-import '../../auth/providers/auth_provider.dart';
+import '../../auth/presentation/logout_action.dart';
 
 class ClientShell extends StatelessWidget {
   final Widget child;
@@ -67,9 +66,5 @@ class ClientShell extends StatelessWidget {
     );
   }
 
-  Future<void> _logout(BuildContext context) async {
-    await context.read<AuthProvider>().logout();
-    if (!context.mounted) return;
-    context.go('/login');
-  }
+  Future<void> _logout(BuildContext context) => confirmAndLogout(context);
 }

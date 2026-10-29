@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import '../../../core/network/api_config.dart';
 import '../../../core/modelos/user_role.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../auth/presentation/logout_action.dart';
 import '../../auth/providers/auth_provider.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -134,37 +135,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Future<void> _logout() async {
-    final auth = context.read<AuthProvider>();
-    final theme = Theme.of(context);
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.lg),
-        ),
-        title: const Text('Cerrar sesión'),
-        content: const Text('¿Estás seguro que quieres cerrar sesión?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () async {
-              Navigator.pop(dialogContext);
-              await auth.logout();
-              if (mounted) context.go('/login');
-            },
-            style: FilledButton.styleFrom(
-              backgroundColor: theme.colorScheme.error,
-            ),
-            child: const Text('Cerrar sesión'),
-          ),
-        ],
-      ),
-    );
-  }
+  Future<void> _logout() => confirmAndLogout(context);
 
   @override
   Widget build(BuildContext context) {
