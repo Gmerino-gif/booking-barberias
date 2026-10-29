@@ -9,9 +9,42 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../auth/providers/auth_provider.dart';
 
+/// El backend entrega los nombres ya resueltos en campos "planos"
+/// (`clientName`, `professionalName`, `serviceName`, `clientPhone`) porque son
+/// el resultado de un `populate`. Algunas respuestas pueden incluir también el
+/// documento anidado, así que se aceptan ambos formatos y se prefiere el plano.
+String _resolveLabel(
+  Map<String, dynamic> map,
+  String flatKey,
+  Map<String, dynamic>? nested,
+  String nestedKey,
+  String fallback,
+) {
+  final resolved = _resolveValue(map, flatKey, nested, nestedKey);
+  return resolved ?? fallback;
+}
+
+/// Igual que [_resolveLabel] pero sin valor por defecto: devuelve `null`
+/// cuando el dato no existe o viene vacío (p. ej. el teléfono del cliente).
+String? _resolveValue(
+  Map<String, dynamic> map,
+  String flatKey,
+  Map<String, dynamic>? nested,
+  String nestedKey,
+) {
+  final flat = map[flatKey];
+  final value = flat is String && flat.trim().isNotEmpty
+      ? flat
+      : nested?[nestedKey];
+  if (value is! String) return null;
+  final trimmed = value.trim();
+  return trimmed.isEmpty ? null : trimmed;
+}
+
 class _BookingSummary {
   final String id;
   final String clientName;
+  final String? clientPhone;
   final String serviceName;
   final String professionalName;
   final DateTime startAt;
@@ -21,6 +54,7 @@ class _BookingSummary {
   const _BookingSummary({
     required this.id,
     required this.clientName,
+    this.clientPhone,
     required this.serviceName,
     required this.professionalName,
     required this.startAt,
@@ -174,10 +208,16 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
 
     return _BookingSummary(
       id: (map['_id'] ?? map['id'] ?? '').toString(),
-      clientName: (client?['name'] ?? 'Cliente').toString(),
-      serviceName: (service?['name'] ?? map['serviceName'] ?? 'Servicio')
-          .toString(),
-      professionalName: (professional?['name'] ?? 'Profesional').toString(),
+      clientName: _resolveLabel(map, 'clientName', client, 'name', 'Cliente'),
+      clientPhone: _resolveValue(map, 'clientPhone', client, 'phone'),
+      serviceName: _resolveLabel(map, 'serviceName', service, 'name', 'Servicio'),
+      professionalName: _resolveLabel(
+        map,
+        'professionalName',
+        professional,
+        'name',
+        'Profesional',
+      ),
       startAt:
           AppFormatters.parseApiDateTime(map['startAt']) ?? DateTime.now(),
       price: _readInt(map['price']) ?? _readInt(service?['price']) ?? 0,
@@ -373,8 +413,40 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
                   child: Icon(Icons.person_outline, color: statusInfo.color),
                 ),
                 title: Text(booking.clientName),
-                subtitle: Text(
-                  '${booking.serviceName} · ${booking.professionalName} · ${_formatDate(booking.startAt)} ${_formatTime(booking.startAt)}',
+                isThreeLine: true,
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${booking.serviceName} · ${booking.professionalName}',
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      '${_formatDate(booking.startAt)} '
+                      '${_formatTime(booking.startAt)}',
+                    ),
+                    if (booking.clientPhone != null) ...[
+                      const SizedBox(height: AppSpacing.xs),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.phone,
+                            size: 13,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
+                          ),
+                          const SizedBox(width: AppSpacing.xs),
+                          Expanded(
+                            child: Text(
+                              booking.clientPhone!,
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
                 ),
                 trailing: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -520,10 +592,16 @@ class _BusinessAgendaScreenState extends State<BusinessAgendaScreen> {
 
     return _BookingSummary(
       id: (map['_id'] ?? map['id'] ?? '').toString(),
-      clientName: (client?['name'] ?? 'Cliente').toString(),
-      serviceName: (service?['name'] ?? map['serviceName'] ?? 'Servicio')
-          .toString(),
-      professionalName: (professional?['name'] ?? 'Profesional').toString(),
+      clientName: _resolveLabel(map, 'clientName', client, 'name', 'Cliente'),
+      clientPhone: _resolveValue(map, 'clientPhone', client, 'phone'),
+      serviceName: _resolveLabel(map, 'serviceName', service, 'name', 'Servicio'),
+      professionalName: _resolveLabel(
+        map,
+        'professionalName',
+        professional,
+        'name',
+        'Profesional',
+      ),
       startAt:
           AppFormatters.parseApiDateTime(map['startAt']) ?? DateTime.now(),
       price: _readInt(map['price']) ?? _readInt(service?['price']) ?? 0,
@@ -555,6 +633,8 @@ class _BusinessAgendaScreenState extends State<BusinessAgendaScreen> {
       AppFormatters.date(date, includeYear: false);
 
   String _formatTime(DateTime date) => AppFormatters.time(date);
+
+  String _formatCurrency(int value) => AppFormatters.currency(value);
 
   ({Color color, String label}) _getStatusInfo(String status) {
     return (
@@ -657,6 +737,29 @@ class _BusinessAgendaScreenState extends State<BusinessAgendaScreen> {
                                   ),
                                   const SizedBox(height: 4),
                                   Text('${_formatTime(booking.startAt)} hrs'),
+                                  if (booking.clientPhone != null) ...[
+                                    const SizedBox(height: 4),
+                                    Row(
+                                      children: [
+                                        Icon(
+                                          Icons.phone,
+                                          size: 13,
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.onSurfaceVariant,
+                                        ),
+                                        const SizedBox(width: AppSpacing.xs),
+                                        Expanded(
+                                          child: Text(
+                                            booking.clientPhone!,
+                                            style: Theme.of(
+                                              context,
+                                            ).textTheme.bodySmall,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
                                 ],
                               ),
                             ),
@@ -672,7 +775,7 @@ class _BusinessAgendaScreenState extends State<BusinessAgendaScreen> {
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
-                                  '${booking.price} COP',
+                                  _formatCurrency(booking.price),
                                   style: Theme.of(
                                     context,
                                   ).textTheme.titleSmall,

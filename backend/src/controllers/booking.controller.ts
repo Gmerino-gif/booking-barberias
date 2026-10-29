@@ -225,6 +225,8 @@ const serializeBooking = (booking: any) => ({
   serviceId: booking.serviceId?._id?.toString?.() ?? booking.serviceId ?? null,
   establishmentName: booking.establishmentId?.name ?? null,
   clientName: booking.clientId?.name ?? null,
+  // El negocio necesita el teléfono del cliente para poder contactarlo.
+  clientPhone: booking.clientId?.phone ?? null,
   professionalName: booking.professionalId?.name ?? null,
   serviceName: booking.serviceId?.name ?? null,
   durationMin: booking.serviceId?.durationMin ?? booking.durationMin ?? null,
