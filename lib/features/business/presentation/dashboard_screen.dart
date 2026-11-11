@@ -114,6 +114,7 @@ class _BookingSummary {
   final String serviceName;
   final String professionalName;
   final DateTime startAt;
+  final DateTime endAt;
   final int price;
   final String status;
   final _BookingReview? review;
@@ -125,10 +126,18 @@ class _BookingSummary {
     required this.serviceName,
     required this.professionalName,
     required this.startAt,
+    required this.endAt,
     required this.price,
     required this.status,
     this.review,
   });
+
+  /// La cita ya empezó (o está en curso).
+  bool get hasStarted => !DateTime.now().isBefore(startAt);
+
+  /// La cita ya terminó, que es lo que exige el backend para poder marcarla
+  /// como completada o como inasistencia.
+  bool get hasFinished => !DateTime.now().isBefore(endAt);
 }
 
 class _ServiceSummary {
@@ -298,11 +307,25 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
         ? map['professionalId'] as Map<String, dynamic>
         : null;
 
+    final startAt =
+        AppFormatters.parseApiDateTime(map['startAt']) ?? DateTime.now();
+    // El backend ya envía `endAt`; si faltara se reconstruye con la duración
+    // del servicio para no perder la hora de fin.
+    final endAt =
+        AppFormatters.parseApiDateTime(map['endAt']) ??
+        startAt.add(Duration(minutes: _readInt(map['durationMin']) ?? 30));
+
     return _BookingSummary(
       id: (map['_id'] ?? map['id'] ?? '').toString(),
       clientName: _resolveLabel(map, 'clientName', client, 'name', 'Cliente'),
       clientPhone: _resolveValue(map, 'clientPhone', client, 'phone'),
-      serviceName: _resolveLabel(map, 'serviceName', service, 'name', 'Servicio'),
+      serviceName: _resolveLabel(
+        map,
+        'serviceName',
+        service,
+        'name',
+        'Servicio',
+      ),
       professionalName: _resolveLabel(
         map,
         'professionalName',
@@ -310,8 +333,8 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
         'name',
         'Profesional',
       ),
-      startAt:
-          AppFormatters.parseApiDateTime(map['startAt']) ?? DateTime.now(),
+      startAt: startAt,
+      endAt: endAt,
       price: _readInt(map['price']) ?? _readInt(service?['price']) ?? 0,
       status: (map['status'] ?? 'pending').toString(),
       review: _mapBookingReview(map['review']),
@@ -379,11 +402,16 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
   String _formatDate(DateTime date) =>
       AppFormatters.date(date, includeYear: false);
 
+  /// Próximas citas del panel: solo las que siguen activas (pendientes o
+  /// confirmadas) y todavía no empezaron. Las canceladas o completadas no son
+  /// «próximas» aunque su fecha sea futura.
   List<_BookingSummary> get _upcomingBookings {
     final now = DateTime.now();
-    final result = _bookings
-        .where((booking) => booking.startAt.isAfter(now))
-        .toList();
+    final result = _bookings.where((booking) {
+      final isActive =
+          booking.status == 'pending' || booking.status == 'confirmed';
+      return isActive && booking.startAt.isAfter(now);
+    }).toList();
     result.sort((a, b) => a.startAt.compareTo(b.startAt));
     return result;
   }
@@ -566,9 +594,9 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
                           Icon(
                             Icons.phone,
                             size: 13,
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.onSurfaceVariant,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant,
                           ),
                           const SizedBox(width: AppSpacing.xs),
                           Expanded(
@@ -786,7 +814,12 @@ class BusinessAgendaScreen extends StatefulWidget {
   State<BusinessAgendaScreen> createState() => _BusinessAgendaScreenState();
 }
 
-class _BusinessAgendaScreenState extends State<BusinessAgendaScreen> {
+class _BusinessAgendaScreenState extends State<BusinessAgendaScreen>
+    with SingleTickerProviderStateMixin {
+  /// Estados en los que la cita todavía espera una acción del negocio.
+  static const Set<String> _activeStatuses = {'pending', 'confirmed'};
+
+  late final TabController _tabController;
   bool _isLoading = true;
   String? _error;
   List<_BookingSummary> _bookings = const [];
@@ -836,7 +869,14 @@ class _BusinessAgendaScreenState extends State<BusinessAgendaScreen> {
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
     _loadAgenda();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadAgenda() async {
@@ -882,10 +922,17 @@ class _BusinessAgendaScreenState extends State<BusinessAgendaScreen> {
       });
     } catch (error) {
       if (!mounted) return;
+      final message = error.toString().replaceFirst('Exception: ', '');
+      // Si ya hay agenda en pantalla (recarga manual) no se reemplaza por el
+      // error: se avisa con un mensaje y se conserva lo que el negocio ve.
       setState(() {
         _isLoading = false;
-        _error = error.toString().replaceFirst('Exception: ', '');
+        if (_bookings.isEmpty) _error = message;
       });
+      if (_bookings.isNotEmpty) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(message)));
+      }
     }
   }
 
@@ -900,11 +947,25 @@ class _BusinessAgendaScreenState extends State<BusinessAgendaScreen> {
         ? map['professionalId'] as Map<String, dynamic>
         : null;
 
+    final startAt =
+        AppFormatters.parseApiDateTime(map['startAt']) ?? DateTime.now();
+    // El backend ya envía `endAt`; si faltara se reconstruye con la duración
+    // del servicio para no perder la hora de fin.
+    final endAt =
+        AppFormatters.parseApiDateTime(map['endAt']) ??
+        startAt.add(Duration(minutes: _readInt(map['durationMin']) ?? 30));
+
     return _BookingSummary(
       id: (map['_id'] ?? map['id'] ?? '').toString(),
       clientName: _resolveLabel(map, 'clientName', client, 'name', 'Cliente'),
       clientPhone: _resolveValue(map, 'clientPhone', client, 'phone'),
-      serviceName: _resolveLabel(map, 'serviceName', service, 'name', 'Servicio'),
+      serviceName: _resolveLabel(
+        map,
+        'serviceName',
+        service,
+        'name',
+        'Servicio',
+      ),
       professionalName: _resolveLabel(
         map,
         'professionalName',
@@ -912,8 +973,8 @@ class _BusinessAgendaScreenState extends State<BusinessAgendaScreen> {
         'name',
         'Profesional',
       ),
-      startAt:
-          AppFormatters.parseApiDateTime(map['startAt']) ?? DateTime.now(),
+      startAt: startAt,
+      endAt: endAt,
       price: _readInt(map['price']) ?? _readInt(service?['price']) ?? 0,
       status: (map['status'] ?? 'pending').toString(),
       review: _mapBookingReview(map['review']),
@@ -939,9 +1000,6 @@ class _BusinessAgendaScreenState extends State<BusinessAgendaScreen> {
     final value = body?['message'];
     return value is String ? value : null;
   }
-
-  String _formatDate(DateTime date) =>
-      AppFormatters.date(date, includeYear: false);
 
   String _formatTime(DateTime date) => AppFormatters.time(date);
 
@@ -971,177 +1029,322 @@ class _BusinessAgendaScreenState extends State<BusinessAgendaScreen> {
       );
     }
 
-    final grouped = <String, List<_BookingSummary>>{};
-    for (final booking in _bookings) {
-      grouped.putIfAbsent(_formatDate(booking.startAt), () => []).add(booking);
+    final active = _activeBookings;
+    final history = _historyBookings;
+
+    return Column(
+      children: [
+        Material(
+          color: Theme.of(context).colorScheme.surface,
+          child: Row(
+            children: [
+              Expanded(
+                child: TabBar(
+                  controller: _tabController,
+                  labelColor: Theme.of(context).colorScheme.primary,
+                  unselectedLabelColor: Theme.of(context)
+                      .colorScheme
+                      .onSurfaceVariant,
+                  indicatorColor: Theme.of(context).colorScheme.secondary,
+                  indicatorWeight: 3,
+                  tabs: const [
+                    Tab(text: 'Reservas activas'),
+                    Tab(text: 'Historial'),
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: 'Actualizar agenda',
+                icon: const Icon(Icons.refresh),
+                onPressed: _loadAgenda,
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: TabBarView(
+            controller: _tabController,
+            children: [
+              _buildBookingList(active, isActive: true),
+              _buildBookingList(history, isActive: false),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Citas que el negocio todavía debe atender: pendientes o confirmadas que
+  /// todavía no quedaron en el pasado.
+  ///
+  /// Una cita de hoy sigue siendo accionable durante toda la jornada (recién
+  /// al terminar se marca como completada), por eso se compara contra el
+  /// inicio del día y no contra la hora exacta.
+  List<_BookingSummary> get _activeBookings {
+    final active = _bookings.where(_isActive).toList();
+    active.sort((a, b) => a.startAt.compareTo(b.startAt));
+    return active;
+  }
+
+  /// Todo lo demás: completadas, canceladas, inasistencias y las citas que
+  /// quedaron sin cerrar en días anteriores. La más reciente va primero.
+  List<_BookingSummary> get _historyBookings {
+    final history = _bookings.where((booking) => !_isActive(booking)).toList();
+    history.sort((a, b) => b.startAt.compareTo(a.startAt));
+    return history;
+  }
+
+  bool _isActive(_BookingSummary booking) {
+    if (!_activeStatuses.contains(booking.status)) return false;
+    final now = DateTime.now();
+    final startOfToday = DateTime(now.year, now.month, now.day);
+    return !booking.startAt.isBefore(startOfToday);
+  }
+
+  /// Lista de citas de una pestaña, agrupadas por día.
+  Widget _buildBookingList(
+    List<_BookingSummary> bookings, {
+    required bool isActive,
+  }) {
+    if (bookings.isEmpty) {
+      return _buildEmptyState(isActive: isActive);
     }
 
-    final dates = grouped.keys.toList();
+    final theme = Theme.of(context);
+    final grouped = <DateTime, List<_BookingSummary>>{};
+    for (final booking in bookings) {
+      final day = DateTime(
+        booking.startAt.year,
+        booking.startAt.month,
+        booking.startAt.day,
+      );
+      grouped.putIfAbsent(day, () => []).add(booking);
+    }
+
+    final count = bookings.length;
+    final String summary;
+    if (isActive) {
+      summary = count == 1 ? '1 reserva activa' : '$count reservas activas';
+    } else {
+      summary = count == 1
+          ? '1 reserva en el historial'
+          : '$count reservas en el historial';
+    }
 
     return ListView(
       padding: const EdgeInsets.all(AppSpacing.md),
       children: [
-        Text('Agenda', style: Theme.of(context).textTheme.headlineSmall),
-        const SizedBox(height: AppSpacing.md),
-        if (dates.isEmpty)
-          const Card(
+        Text(summary, style: theme.textTheme.bodySmall),
+        const SizedBox(height: AppSpacing.sm),
+        ...grouped.entries.map((entry) {
+          final list = entry.value;
+          return Card(
+            margin: const EdgeInsets.only(bottom: AppSpacing.md),
             child: Padding(
-              padding: EdgeInsets.all(16),
-              child: Text('No hay citas agendadas todavía.'),
+              padding: const EdgeInsets.all(AppSpacing.sm),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.xs,
+                      vertical: AppSpacing.xs,
+                    ),
+                    child: Text(
+                      _dayHeading(entry.key, includeYear: !isActive),
+                      style: theme.textTheme.titleMedium,
+                    ),
+                  ),
+                  ...list.map(_buildBookingCard),
+                ],
+              ),
             ),
-          )
-        else
-          ...dates.map((date) {
-            final list = grouped[date]!;
-            return Card(
-              margin: const EdgeInsets.only(bottom: 16),
-              child: Padding(
-                padding: const EdgeInsets.all(12),
+          );
+        }),
+      ],
+    );
+  }
+
+  /// Encabezado del día con un atajo legible para hoy y mañana.
+  String _dayHeading(DateTime day, {required bool includeYear}) {
+    final formatted = AppFormatters.date(day, includeYear: includeYear);
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    if (day == today) return 'Hoy · $formatted';
+    final tomorrow = DateTime(now.year, now.month, now.day + 1);
+    if (day == tomorrow) return 'Mañana · $formatted';
+    return formatted;
+  }
+
+  Widget _buildEmptyState({required bool isActive}) {
+    final theme = Theme.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              isActive ? Icons.event_available : Icons.event_busy,
+              size: 72,
+              color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            Text(
+              isActive ? 'No hay reservas activas' : 'Aún no hay historial',
+              style: theme.textTheme.titleMedium,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              isActive ? 'Las citas pendientes y confirmadas aparecerán aquí' : 'Las citas completadas, canceladas y pasadas aparecerán aquí',
+              style: theme.textTheme.bodySmall,
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Acciones que el backend acepta para esta cita.
+  ///
+  /// Replica la máquina de estados de `updateBookingStatus`: una cita solo se
+  /// completa cuando ya terminó y solo se cancela antes de empezar, así que
+  /// no se ofrecen opciones que el API rechazaría.
+  List<({String status, String label})> _availableActions(
+    _BookingSummary booking,
+  ) {
+    final actions = <({String status, String label})>[];
+    switch (booking.status) {
+      case 'pending':
+        actions.add((status: 'confirmed', label: 'Confirmar'));
+        if (!booking.hasStarted) {
+          actions.add((status: 'cancelled', label: 'Cancelar'));
+        }
+        break;
+      case 'confirmed':
+        if (booking.hasFinished) {
+          actions.add((status: 'completed', label: 'Marcar completada'));
+          actions.add((status: 'no_show', label: 'Marcar inasistencia'));
+        } else if (!booking.hasStarted) {
+          actions.add((status: 'cancelled', label: 'Cancelar'));
+        }
+        break;
+      default:
+        break;
+    }
+    return actions;
+  }
+
+  Widget _buildBookingCard(_BookingSummary booking) {
+    final theme = Theme.of(context);
+    final statusInfo = _getStatusInfo(booking.status);
+    final actions = _availableActions(booking);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: statusInfo.color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                ),
+                child: Icon(Icons.schedule, color: statusInfo.color),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Text(booking.clientName, style: theme.textTheme.titleSmall),
+                    const SizedBox(height: AppSpacing.xs),
                     Text(
-                      date,
-                      style: Theme.of(context).textTheme.titleMedium,
+                      '${booking.serviceName} · ${booking.professionalName}',
                     ),
-                    const SizedBox(height: 12),
-                    ...list.map((booking) {
-                      final statusInfo = _getStatusInfo(booking.status);
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(AppRadius.md),
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              width: 42,
-                              height: 42,
-                              decoration: BoxDecoration(
-                                color: statusInfo.color.withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Icon(
-                                Icons.schedule,
-                                color: statusInfo.color,
-                              ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      '${_formatTime(booking.startAt)} - '
+                      '${_formatTime(booking.endAt)}',
+                    ),
+                    if (booking.clientPhone != null) ...[
+                      const SizedBox(height: AppSpacing.xs),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.phone,
+                            size: 13,
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                          const SizedBox(width: AppSpacing.xs),
+                          Expanded(
+                            child: Text(
+                              booking.clientPhone!,
+                              style: theme.textTheme.bodySmall,
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    booking.clientName,
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.titleSmall,
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    '${booking.serviceName} · ${booking.professionalName}',
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text('${_formatTime(booking.startAt)} hrs'),
-                                  if (booking.clientPhone != null) ...[
-                                    const SizedBox(height: 4),
-                                    Row(
-                                      children: [
-                                        Icon(
-                                          Icons.phone,
-                                          size: 13,
-                                          color: Theme.of(
-                                            context,
-                                          ).colorScheme.onSurfaceVariant,
-                                        ),
-                                        const SizedBox(width: AppSpacing.xs),
-                                        Expanded(
-                                          child: Text(
-                                            booking.clientPhone!,
-                                            style: Theme.of(
-                                              context,
-                                            ).textTheme.bodySmall,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                  if (booking.review != null) ...[
-                                    const SizedBox(height: AppSpacing.sm),
-                                    _BookingReviewSummary(
-                                      review: booking.review!,
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Chip(
-                                  label: Text(statusInfo.label),
-                                  visualDensity: VisualDensity.compact,
-                                  backgroundColor: statusInfo.color.withValues(
-                                    alpha: 0.12,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  _formatCurrency(booking.price),
-                                  style: Theme.of(
-                                    context,
-                                  ).textTheme.titleSmall,
-                                ),
-                                if (booking.status == 'pending' ||
-                                    booking.status == 'confirmed')
-                                  PopupMenuButton<String>(
-                                    tooltip: 'Actualizar reserva',
-                                    onSelected: (status) =>
-                                        _changeBookingStatus(booking, status),
-                                    itemBuilder: (_) => [
-                                      if (booking.status == 'pending')
-                                        const PopupMenuItem(
-                                          value: 'confirmed',
-                                          child: Text('Confirmar'),
-                                        ),
-                                      if (booking.status == 'pending' ||
-                                          booking.status == 'confirmed')
-                                        const PopupMenuItem(
-                                          value: 'cancelled',
-                                          child: Text('Cancelar'),
-                                        ),
-                                      if (booking.status == 'confirmed' &&
-                                          booking.startAt.isBefore(
-                                            DateTime.now(),
-                                          )) ...[
-                                        const PopupMenuItem(
-                                          value: 'completed',
-                                          child: Text('Marcar completada'),
-                                        ),
-                                        const PopupMenuItem(
-                                          value: 'no_show',
-                                          child: Text('Marcar inasistencia'),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      );
-                    }),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),
-            );
-          }),
-      ],
+              const SizedBox(width: AppSpacing.sm),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Chip(
+                    label: Text(statusInfo.label),
+                    visualDensity: VisualDensity.compact,
+                    backgroundColor: statusInfo.color.withValues(alpha: 0.12),
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _formatCurrency(booking.price),
+                        style: theme.textTheme.titleSmall,
+                      ),
+                      if (actions.isNotEmpty)
+                        PopupMenuButton<String>(
+                          tooltip: 'Actualizar reserva',
+                          icon: const Icon(Icons.more_vert),
+                          onSelected: (status) =>
+                              _changeBookingStatus(booking, status),
+                          itemBuilder: (_) => actions
+                              .map(
+                                (action) => PopupMenuItem(
+                                  value: action.status,
+                                  child: Text(action.label),
+                                ),
+                              )
+                              .toList(),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+          if (booking.review != null) ...[
+            const SizedBox(height: AppSpacing.sm),
+            _BookingReviewSummary(review: booking.review!),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -1273,9 +1476,15 @@ class _BusinessServicesScreenState extends State<BusinessServicesScreen> {
 
   Future<void> _editService([_ServiceSummary? service]) async {
     final nameController = TextEditingController(text: service?.name ?? '');
-    final descriptionController = TextEditingController(text: service?.description ?? '');
-    final priceController = TextEditingController(text: service?.price.toString() ?? '');
-    final durationController = TextEditingController(text: service?.durationMin.toString() ?? '30');
+    final descriptionController = TextEditingController(
+      text: service?.description ?? '',
+    );
+    final priceController = TextEditingController(
+      text: service?.price.toString() ?? '',
+    );
+    final durationController = TextEditingController(
+      text: service?.durationMin.toString() ?? '30',
+    );
     final formKey = GlobalKey<FormState>();
     final accepted = await showDialog<bool>(
       context: context,
@@ -1284,22 +1493,67 @@ class _BusinessServicesScreenState extends State<BusinessServicesScreen> {
         content: Form(
           key: formKey,
           child: SingleChildScrollView(
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              TextFormField(controller: nameController, maxLength: 100, decoration: const InputDecoration(labelText: 'Nombre'), validator: (v) => (v?.trim().length ?? 0) < 2 ? 'Ingresa un nombre' : null),
-              TextFormField(controller: descriptionController, maxLength: 500, decoration: const InputDecoration(labelText: 'Descripción')),
-              TextFormField(controller: priceController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Precio (COP)'), validator: (v) => (int.tryParse(v ?? '') ?? -1) < 0 ? 'Ingresa un precio válido' : null),
-              TextFormField(controller: durationController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Duración (minutos)'), validator: (v) { final n = int.tryParse(v ?? ''); return n == null || n < 5 || n > 480 ? 'Usa entre 5 y 480 minutos' : null; }),
-            ]),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: nameController,
+                  maxLength: 100,
+                  decoration: const InputDecoration(labelText: 'Nombre'),
+                  validator: (v) =>
+                      (v?.trim().length ?? 0) < 2 ? 'Ingresa un nombre' : null,
+                ),
+                TextFormField(
+                  controller: descriptionController,
+                  maxLength: 500,
+                  decoration: const InputDecoration(labelText: 'Descripción'),
+                ),
+                TextFormField(
+                  controller: priceController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Precio (COP)'),
+                  validator: (v) => (int.tryParse(v ?? '') ?? -1) < 0
+                      ? 'Ingresa un precio válido'
+                      : null,
+                ),
+                TextFormField(
+                  controller: durationController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Duración (minutos)',
+                  ),
+                  validator: (v) {
+                    final n = int.tryParse(v ?? '');
+                    return n == null || n < 5 || n > 480
+                        ? 'Usa entre 5 y 480 minutos'
+                        : null;
+                  },
+                ),
+              ],
+            ),
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')),
-          FilledButton(onPressed: () { if (formKey.currentState!.validate()) Navigator.pop(dialogContext, true); }, child: const Text('Guardar')),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (formKey.currentState!.validate()) {
+                Navigator.pop(dialogContext, true);
+              }
+            },
+            child: const Text('Guardar'),
+          ),
         ],
       ),
     );
     if (accepted != true || !mounted) {
-      nameController.dispose(); descriptionController.dispose(); priceController.dispose(); durationController.dispose();
+      nameController.dispose();
+      descriptionController.dispose();
+      priceController.dispose();
+      durationController.dispose();
       return;
     }
 
@@ -1325,19 +1579,48 @@ class _BusinessServicesScreenState extends State<BusinessServicesScreen> {
         'durationMin': int.parse(durationController.text),
       });
       final response = service == null
-          ? await http.post(uri, headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'}, body: payload)
-          : await http.put(uri, headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'}, body: payload);
+          ? await http.post(
+              uri,
+              headers: {
+                'Authorization': 'Bearer $token',
+                'Content-Type': 'application/json',
+              },
+              body: payload,
+            )
+          : await http.put(
+              uri,
+              headers: {
+                'Authorization': 'Bearer $token',
+                'Content-Type': 'application/json',
+              },
+              body: payload,
+            );
       if (!mounted) return;
       if (response.statusCode == 201 || response.statusCode == 200) {
         await _loadServices();
       } else {
         final body = _decodeBody(response.body);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_readMessage(body) ?? 'No se pudo guardar el servicio')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              _readMessage(body) ?? 'No se pudo guardar el servicio',
+            ),
+          ),
+        );
       }
     } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo conectar para guardar el servicio')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No se pudo conectar para guardar el servicio'),
+          ),
+        );
+      }
     } finally {
-      nameController.dispose(); descriptionController.dispose(); priceController.dispose(); durationController.dispose();
+      nameController.dispose();
+      descriptionController.dispose();
+      priceController.dispose();
+      durationController.dispose();
     }
   }
 
@@ -1346,10 +1629,18 @@ class _BusinessServicesScreenState extends State<BusinessServicesScreen> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Eliminar servicio'),
-        content: Text('¿Eliminar ${service.name}? Las reservas existentes se conservan y pueden impedir la eliminación.'),
+        content: Text(
+          '¿Eliminar ${service.name}? Las reservas existentes se conservan y pueden impedir la eliminación.',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')),
-          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Eliminar')),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Eliminar'),
+          ),
         ],
       ),
     );
@@ -1357,16 +1648,31 @@ class _BusinessServicesScreenState extends State<BusinessServicesScreen> {
     final token = context.read<AuthProvider>().accessToken;
     if (token == null) return;
     try {
-      final response = await http.delete(Uri.parse('${ApiConfig.baseUrl}/services/${service.id}'), headers: {'Authorization': 'Bearer $token'});
+      final response = await http.delete(
+        Uri.parse('${ApiConfig.baseUrl}/services/${service.id}'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
       if (!mounted) return;
       if (response.statusCode == 200) {
         await _loadServices();
       } else {
         final body = _decodeBody(response.body);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_readMessage(body) ?? 'No se pudo eliminar el servicio')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              _readMessage(body) ?? 'No se pudo eliminar el servicio',
+            ),
+          ),
+        );
       }
     } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo conectar para eliminar el servicio')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No se pudo conectar para eliminar el servicio'),
+          ),
+        );
+      }
     }
   }
 
@@ -1395,7 +1701,14 @@ class _BusinessServicesScreenState extends State<BusinessServicesScreen> {
           style: Theme.of(context).textTheme.headlineSmall,
         ),
         const SizedBox(height: 8),
-        Align(alignment: Alignment.centerRight, child: FilledButton.icon(onPressed: () => _editService(), icon: const Icon(Icons.add), label: const Text('Agregar servicio'))),
+        Align(
+          alignment: Alignment.centerRight,
+          child: FilledButton.icon(
+            onPressed: () => _editService(),
+            icon: const Icon(Icons.add),
+            label: const Text('Agregar servicio'),
+          ),
+        ),
         if (_services.isEmpty)
           const Card(
             child: Padding(
@@ -1417,21 +1730,33 @@ class _BusinessServicesScreenState extends State<BusinessServicesScreen> {
                       ? 'Sin descripción'
                       : service.description,
                 ),
-                trailing: PopupMenuButton<String>(
-                  onSelected: (action) => action == 'edit' ? _editService(service) : _deleteService(service),
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(value: 'edit', child: Text('Editar')),
-                    PopupMenuItem(value: 'delete', child: Text('Eliminar')),
-                  ],
-                  child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
-                    Text(_formatCurrency(service.price)),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${service.durationMin} min',
-                      style: Theme.of(context).textTheme.bodySmall,
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(_formatCurrency(service.price)),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${service.durationMin} min',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
                     ),
-                    const Icon(Icons.more_horiz, size: 18),
-                  ]),
+                    PopupMenuButton<String>(
+                      tooltip: 'Opciones del servicio',
+                      icon: const Icon(Icons.more_vert),
+                      onSelected: (action) => action == 'edit'
+                          ? _editService(service)
+                          : _deleteService(service),
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(value: 'edit', child: Text('Editar')),
+                        PopupMenuItem(value: 'delete', child: Text('Eliminar')),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             ),
