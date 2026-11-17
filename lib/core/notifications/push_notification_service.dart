@@ -1,8 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
+
+import '../network/api_config.dart';
 
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -16,6 +20,11 @@ class PushNotificationService {
   static bool _initialized = false;
   static bool _backgroundHandlerRegistered = false;
   static String? _currentToken;
+  static String? _authenticatedUserId;
+  static String? _accessToken;
+  static String? _registeredUserId;
+  static String? _registeredFcmToken;
+  static Future<void> _registrationQueue = Future<void>.value();
 
   static bool get isSupportedPlatform =>
       !kIsWeb &&
@@ -37,6 +46,17 @@ class PushNotificationService {
       _foregroundMessages.stream;
   static Stream<RemoteMessage> get notificationOpens =>
       _notificationOpens.stream;
+
+  static void setAuthenticatedSession({
+    required String? userId,
+    required String? accessToken,
+  }) {
+    _authenticatedUserId = userId;
+    _accessToken = accessToken;
+    if (userId != null && accessToken != null) {
+      _enqueueTokenRegistration();
+    }
+  }
 
   static void registerBackgroundHandler() {
     if (!isSupportedPlatform || _backgroundHandlerRegistered) return;
@@ -66,6 +86,7 @@ class PushNotificationService {
       (token) {
         _currentToken = token;
         _tokenRefreshes.add(token);
+        _enqueueTokenRegistration();
       },
       onError: (Object error) =>
           debugPrint('Firebase token refresh listener failed: $error'),
@@ -82,6 +103,7 @@ class PushNotificationService {
       // The app stores the FCM token for optional user/business association.
       // ignore: deprecated_member_use
       _currentToken = await messaging.getToken();
+      _enqueueTokenRegistration();
     } on FirebaseException catch (error, stackTrace) {
       debugPrint('Firebase Messaging token request failed: $error');
       debugPrintStack(stackTrace: stackTrace);
@@ -95,6 +117,60 @@ class PushNotificationService {
     } on FirebaseException catch (error, stackTrace) {
       debugPrint('Firebase launch message retrieval failed: $error');
       debugPrintStack(stackTrace: stackTrace);
+    }
+  }
+
+  static void _enqueueTokenRegistration() {
+    _registrationQueue = _registrationQueue
+        .then((_) => _registerTokenForAuthenticatedUser())
+        .catchError((Object error, StackTrace stackTrace) {
+          debugPrint('FCM token registration failed: $error');
+          debugPrintStack(stackTrace: stackTrace);
+        });
+  }
+
+  static Future<void> _registerTokenForAuthenticatedUser() async {
+    final userId = _authenticatedUserId;
+    final accessToken = _accessToken;
+    final fcmToken = _currentToken;
+    if (userId == null ||
+        accessToken == null ||
+        fcmToken == null ||
+        fcmToken.isEmpty ||
+        (_registeredUserId == userId && _registeredFcmToken == fcmToken)) {
+      return;
+    }
+
+    late final http.Response response;
+    try {
+      response = await http
+          .post(
+            Uri.parse('${ApiConfig.baseUrl}/auth/me/fcm-token'),
+            headers: {
+              'Content-Type': 'application/json; charset=UTF-8',
+              'Authorization': 'Bearer $accessToken',
+            },
+            body: jsonEncode({'fcmToken': fcmToken}),
+          )
+          .timeout(const Duration(seconds: 15));
+    } on TimeoutException {
+      debugPrint('FCM token registration timed out');
+      return;
+    } on http.ClientException catch (error) {
+      debugPrint('FCM token registration could not reach the API: $error');
+      return;
+    }
+
+    if (response.statusCode != 200) {
+      debugPrint(
+        'FCM token registration failed with status ${response.statusCode}',
+      );
+      return;
+    }
+
+    if (_authenticatedUserId == userId && _currentToken == fcmToken) {
+      _registeredUserId = userId;
+      _registeredFcmToken = fcmToken;
     }
   }
 }

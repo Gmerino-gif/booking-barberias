@@ -7,6 +7,7 @@ import {
   refresh,
   getMe,
   updateMe,
+  registerFcmToken,
   forgotPassword,
   resetPassword,
 } from '../controllers/auth.controller.js';
@@ -46,5 +47,6 @@ router.post('/refresh', refresh);
 // GET /api/auth/me
 router.get('/me', authenticate, getMe);
 router.patch('/me', authenticate, updateMe);
+router.post('/me/fcm-token', authenticate, registerFcmToken);
 
 export default router;

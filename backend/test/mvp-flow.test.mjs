@@ -16,6 +16,7 @@ process.env.JWT_SECRET ??= 'integration-test-only-secret-at-least-32-chars';
 
 const { default: app } = await import('../dist/app.js');
 const { BookingSlotLock } = await import('../dist/models/BookingSlotLock.js');
+const { User } = await import('../dist/models/User.js');
 let server;
 let baseUrl;
 
@@ -67,7 +68,57 @@ async function register(role, suffix) {
 
 test('flujo integral negocio → servicio → reserva → reseña y límites de permisos', async () => {
   const owner = await register('owner', 'negocio');
+  const fcmToken = 'test-fcm-token-device-1';
+  assert.equal(
+    (await call('/auth/me/fcm-token', {
+      method: 'POST',
+      body: { fcmToken },
+    })).status,
+    401,
+  );
+  assert.equal(
+    (await call('/auth/me/fcm-token', {
+      method: 'POST',
+      token: owner.token,
+      body: { fcmToken: ' ' },
+    })).status,
+    400,
+  );
+  assert.equal(
+    (await call('/auth/me/fcm-token', {
+      method: 'POST',
+      token: owner.token,
+      body: { fcmToken },
+    })).status,
+    200,
+  );
+  let storedOwner = await User.findById(owner.user.id).select('+fcmTokens');
+  assert.deepEqual(storedOwner?.fcmTokens, [fcmToken]);
+  assert.equal(
+    (await call('/auth/me/fcm-token', {
+      method: 'POST',
+      token: owner.token,
+      body: { fcmToken },
+    })).status,
+    200,
+  );
+  storedOwner = await User.findById(owner.user.id).select('+fcmTokens');
+  assert.deepEqual(storedOwner?.fcmTokens, [fcmToken], 'el registro debe ser idempotente');
+
   const client = await register('client', 'cliente');
+  assert.equal(
+    (await call('/auth/me/fcm-token', {
+      method: 'POST',
+      token: client.token,
+      body: { fcmToken },
+    })).status,
+    200,
+  );
+  storedOwner = await User.findById(owner.user.id).select('+fcmTokens');
+  const storedClient = await User.findById(client.user.id).select('+fcmTokens');
+  assert.deepEqual(storedOwner?.fcmTokens, []);
+  assert.deepEqual(storedClient?.fcmTokens, [fcmToken]);
+
   const concurrentClient = await register('client', 'cliente-paralelo');
   const otherOwner = await register('owner', 'otro-negocio');
 

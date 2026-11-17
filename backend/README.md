@@ -9,4 +9,4 @@ API REST Express + TypeScript + MongoDB. Para los comandos de desarrollo, config
 - `npm start`: inicia el backend compilado.
 - `npm test`: compila y ejecuta el recorrido de integración sobre una base MongoDB aislada indicada por `MONGODB_TEST_URI`.
 
-En producción el servidor valida MongoDB, un secreto JWT de al menos 32 bytes, SMTP y la lista explícita `CORS_ORIGINS` antes de escuchar conexiones.
+En producción el servidor valida MongoDB, un secreto JWT de al menos 32 bytes, SMTP y la lista explícita `CORS_ORIGINS` antes de escuchar conexiones. Firebase Admin usa Application Default Credentials, `GOOGLE_APPLICATION_CREDENTIALS` o el secreto `FIREBASE_SERVICE_ACCOUNT_JSON`; nunca guardes la clave de servicio en el repositorio. El servidor envía nuevas reservas al dueño del establecimiento y ejecuta recordatorios para clientes con reserva confirmada.

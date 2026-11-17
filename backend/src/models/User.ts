@@ -11,6 +11,7 @@ const userSchema = new Schema(
     passwordResetTokenHash: { type: String, select: false },
     passwordResetExpiresAt: { type: Date, select: false },
     tokenVersion: { type: Number, default: 0, select: false },
+    fcmTokens: { type: [String], default: [], select: false },
     role: { type: String, required: true, enum: USER_ROLES, default: 'client' },
     phone: { type: String, required: true, trim: true, maxlength: 20 },
     photoUrl: { type: String },

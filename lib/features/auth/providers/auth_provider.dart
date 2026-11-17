@@ -7,14 +7,13 @@ import 'package:http/http.dart' as http;
 
 import '../../../core/modelos/user_role.dart';
 import '../../../core/network/api_config.dart';
+import '../../../core/notifications/push_notification_service.dart';
 
 enum AuthStatus { unknown, authenticated, unauthenticated }
 
 class AuthProvider extends ChangeNotifier {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
-    aOptions: AndroidOptions(
-      resetOnError: true,
-    ),
+    aOptions: AndroidOptions(resetOnError: true),
   );
   static const _accessTokenKey = 'auth.accessToken';
   static const _refreshTokenKey = 'auth.refreshToken';
@@ -78,6 +77,7 @@ class AuthProvider extends ChangeNotifier {
       _status = AuthStatus.unauthenticated;
       _clearMemory();
     } finally {
+      _syncPushNotificationSession();
       notifyListeners();
     }
   }
@@ -125,6 +125,7 @@ class AuthProvider extends ChangeNotifier {
       _status = AuthStatus.authenticated;
       await _saveSession();
       _scheduleRefresh();
+      _syncPushNotificationSession();
       notifyListeners();
     } on AuthException {
       rethrow;
@@ -173,6 +174,7 @@ class AuthProvider extends ChangeNotifier {
       _accessToken = renewedToken;
       await _saveSession();
       _scheduleRefresh();
+      _syncPushNotificationSession();
       notifyListeners();
       return true;
     } on TimeoutException {
@@ -243,6 +245,13 @@ class AuthProvider extends ChangeNotifier {
     _role = UserRole.fromString(user['role'] as String? ?? 'client');
   }
 
+  void _syncPushNotificationSession() {
+    PushNotificationService.setAuthenticatedSession(
+      userId: _status == AuthStatus.authenticated ? _userId : null,
+      accessToken: _status == AuthStatus.authenticated ? _accessToken : null,
+    );
+  }
+
   Map<String, dynamic> _userJson() => {
     'id': _userId,
     'name': _userName,
@@ -270,6 +279,7 @@ class AuthProvider extends ChangeNotifier {
     _refreshTimer?.cancel();
     _status = AuthStatus.unauthenticated;
     _clearMemory();
+    _syncPushNotificationSession();
     notifyListeners();
     try {
       await _secureStorage.deleteAll().timeout(const Duration(seconds: 2));
@@ -306,6 +316,7 @@ class AuthProvider extends ChangeNotifier {
   void applyUserPayload(Map<String, dynamic> user) {
     _setUser(user);
     unawaited(_saveSession());
+    _syncPushNotificationSession();
     notifyListeners();
   }
 

@@ -15,6 +15,9 @@ const bookingSchema = new Schema(
     // Permite reconstruir la hora local exacta que el usuario eligió.
     timeZoneOffsetMinutes: { type: Number, default: 0, min: -14 * 60, max: 14 * 60 },
     status: { type: String, enum: BOOKING_STATUSES, default: 'pending' },
+    reminderSent: { type: Boolean, default: false, select: false },
+    reminderSentAt: { type: Date, select: false },
+    reminderClaimedAt: { type: Date, select: false },
     price: { type: Number, required: true, min: 0 },
     notes: { type: String, trim: true, maxlength: 500 },
   },
@@ -23,5 +26,9 @@ const bookingSchema = new Schema(
 
 bookingSchema.index({ establishmentId: 1, startAt: 1 });
 bookingSchema.index({ professionalId: 1, startAt: 1 });
+bookingSchema.index(
+  { status: 1, reminderSent: 1, startAt: 1 },
+  { name: 'due_booking_reminders' },
+);
 
 export const Booking = model('Booking', bookingSchema);

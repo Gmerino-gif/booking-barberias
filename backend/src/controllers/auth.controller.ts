@@ -268,6 +268,45 @@ export const getMe = async (req: AuthenticatedRequest, res: Response): Promise<v
   }
 };
 
+export const registerFcmToken = async (
+  req: AuthenticatedRequest,
+  res: Response,
+): Promise<void> => {
+  if (!req.user) {
+    res.status(401).json({ message: 'Acceso no autorizado' });
+    return;
+  }
+
+  const body = req.body as Record<string, unknown> | null;
+  const fcmToken =
+    typeof body?.fcmToken === 'string' ? body.fcmToken.trim() : '';
+  if (fcmToken.length === 0 || fcmToken.length > 4096) {
+    res.status(400).json({ message: 'El token FCM no es válido' });
+    return;
+  }
+
+  try {
+    const user = await User.findById(req.user.id).select('_id');
+    if (!user) {
+      res.status(404).json({ message: 'Usuario no encontrado' });
+      return;
+    }
+
+    await User.updateMany(
+      { _id: { $ne: req.user.id }, fcmTokens: fcmToken },
+      { $pull: { fcmTokens: fcmToken } },
+    );
+    await User.updateOne(
+      { _id: req.user.id },
+      { $addToSet: { fcmTokens: fcmToken } },
+    );
+
+    res.status(200).json({ message: 'Token FCM registrado' });
+  } catch {
+    res.status(500).json({ message: 'No se pudo registrar el token FCM' });
+  }
+};
+
 export const updateMe = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   if (!req.user) {
     res.status(401).json({ message: 'Acceso no autorizado' });

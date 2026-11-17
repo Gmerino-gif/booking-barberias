@@ -7,6 +7,7 @@ import { Service } from '../models/Service.js';
 import { Professional } from '../models/Professional.js';
 import { Review } from '../models/Review.js';
 import { getAvailableSlots } from '../services/availability.service.js';
+import { notifyOwnerAboutNewBooking } from '../services/booking-notification.service.js';
 import type { AuthenticatedRequest } from '../middleware/auth.middleware.js';
 
 export const createBooking = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
@@ -68,7 +69,9 @@ export const createBooking = async (req: AuthenticatedRequest, res: Response): P
 
     const bookingId = new Types.ObjectId();
     const intervalMs = 30 * 60 * 1000;
-    const establishment = await Establishment.findById(establishmentId).select('openingMinutes');
+    const establishment = await Establishment.findById(establishmentId).select(
+      'openingMinutes ownerId',
+    );
     if (!establishment) {
       res.status(404).json({ message: 'Establecimiento no encontrado' });
       return;
@@ -125,6 +128,21 @@ export const createBooking = async (req: AuthenticatedRequest, res: Response): P
       await BookingSlotLock.deleteMany({ bookingId });
       throw error;
     }
+
+    void notifyOwnerAboutNewBooking({
+      establishmentOwnerId: establishment.ownerId.toString(),
+      clientId: req.user!.id,
+      bookingId: bookingId.toString(),
+      startAt,
+      timeZoneOffsetMinutes: utcOffsetMinutes,
+      serviceName: service.name,
+      professionalName: professional.name,
+    }).catch((error: unknown) => {
+      console.error(
+        `No se pudo notificar al dueño del establecimiento sobre la reserva ${bookingId}`,
+        error,
+      );
+    });
 
     res.status(201).json({ message: 'Reserva creada exitosamente', booking });
   } catch {
