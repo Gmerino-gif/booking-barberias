@@ -170,6 +170,8 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
   String _businessName = 'Negocio';
   double _rating = 0;
   List<_BookingSummary> _bookings = const [];
+  // Keep the existing service catalog request and mapping unchanged.
+  // ignore: unused_field
   List<_ServiceSummary> _services = const [];
   List<_ReviewSummary> _reviews = const [];
 
@@ -435,22 +437,15 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
         .fold<int>(0, (sum, booking) => sum + booking.price);
   }
 
-  /// Same figure but restricted to today's completed services.
-  int get _todaysCompletedRevenue {
-    final today = DateTime.now();
+  int get _completedServicesCount {
     return _bookings
-        .where((booking) {
-          return booking.status == 'completed' &&
-              booking.startAt.year == today.year &&
-              booking.startAt.month == today.month &&
-              booking.startAt.day == today.day;
-        })
-        .fold<int>(0, (sum, booking) => sum + booking.price);
+        .where((booking) => booking.status == 'completed')
+        .length;
   }
 
-  DateTime? get _nextBookingDate {
-    if (_upcomingBookings.isEmpty) return null;
-    return _upcomingBookings.first.startAt;
+  _BookingSummary? get _nextBooking {
+    final bookings = _upcomingBookings;
+    return bookings.isEmpty ? null : bookings.first;
   }
 
   ({Color color, String label}) _getStatusInfo(String status) {
@@ -477,7 +472,7 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
       );
     }
 
-    final nextBooking = _nextBookingDate;
+    final nextBooking = _nextBooking;
 
     return ListView(
       padding: const EdgeInsets.all(AppSpacing.md),
@@ -521,9 +516,9 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
             const SizedBox(width: 12),
             Expanded(
               child: _KpiCard(
-                title: 'Ingresos',
+                title: 'Ingresos totales',
                 value: _formatCurrency(_completedRevenue),
-                subtitle: 'Hoy: ${_formatCurrency(_todaysCompletedRevenue)}',
+                subtitle: 'De citas completadas',
                 icon: Icons.attach_money,
               ),
             ),
@@ -534,8 +529,8 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
           children: [
             Expanded(
               child: _KpiCard(
-                title: 'Servicios',
-                value: _services.length.toString(),
+                title: 'Servicios completados',
+                value: _completedServicesCount.toString(),
                 icon: Icons.content_cut,
               ),
             ),
@@ -545,8 +540,11 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
                 title: 'Próxima cita',
                 value: nextBooking == null
                     ? 'Sin citas'
-                    : _formatTime(nextBooking),
+                    : _formatTime(nextBooking.startAt),
                 icon: Icons.schedule,
+                subtitle: nextBooking == null
+                    ? null
+                    : 'Cliente: ${nextBooking.clientName}',
               ),
             ),
           ],

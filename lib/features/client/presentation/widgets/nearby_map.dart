@@ -39,6 +39,7 @@ class NearbyMap extends StatefulWidget {
   final List<NearbyBarber> barbers;
   final double? userLat;
   final double? userLng;
+  final int recenterId;
   final double height;
   final void Function(NearbyBarber)? onBarberTap;
   final ValueChanged<LatLng>? onCenterChanged;
@@ -48,6 +49,7 @@ class NearbyMap extends StatefulWidget {
     required this.barbers,
     this.userLat,
     this.userLng,
+    this.recenterId = 0,
     this.height = 220,
     this.onBarberTap,
     this.onCenterChanged,
@@ -64,6 +66,16 @@ class _NearbyMapState extends State<NearbyMap> {
   void dispose() {
     _mapController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant NearbyMap oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.recenterId != oldWidget.recenterId) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _mapController.move(_center, 14);
+      });
+    }
   }
 
   static const _barranquillaCenter = LatLng(10.920684, -74.8097153);

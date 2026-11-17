@@ -11,7 +11,11 @@ import '../../../core/network/api_config.dart';
 enum AuthStatus { unknown, authenticated, unauthenticated }
 
 class AuthProvider extends ChangeNotifier {
-  final FlutterSecureStorage _secureStorage = FlutterSecureStorage();
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
+    aOptions: AndroidOptions(
+      resetOnError: true,
+    ),
+  );
   static const _accessTokenKey = 'auth.accessToken';
   static const _refreshTokenKey = 'auth.refreshToken';
   static const _userKey = 'auth.user';
@@ -41,31 +45,39 @@ class AuthProvider extends ChangeNotifier {
   bool get isBusiness => _role?.isBusiness ?? false;
 
   Future<void> restoreSession() async {
+    _status = AuthStatus.unauthenticated;
     try {
-      _accessToken = await _secureStorage.read(key: _accessTokenKey);
-      _refreshToken = await _secureStorage.read(key: _refreshTokenKey);
-      final storedUser = await _secureStorage.read(key: _userKey);
-      if (_accessToken == null ||
-          _accessToken!.isEmpty ||
-          _refreshToken == null ||
-          _refreshToken!.isEmpty) {
-        await logout();
-        return;
-      }
-      if (storedUser != null) {
-        final decoded = jsonDecode(storedUser);
-        if (decoded is Map<String, dynamic>) _setUser(decoded);
-      }
-      _status = AuthStatus.authenticated;
-      notifyListeners();
-      if (_isAccessTokenExpired(_accessToken!)) {
-        await _refreshAccessToken();
-      } else {
-        _scheduleRefresh();
+      final results = await Future.wait([
+        _secureStorage.read(key: _accessTokenKey),
+        _secureStorage.read(key: _refreshTokenKey),
+        _secureStorage.read(key: _userKey),
+      ]).timeout(const Duration(milliseconds: 500));
+
+      final token = results[0];
+      final refresh = results[1];
+      final storedUser = results[2];
+
+      if (token != null &&
+          token.isNotEmpty &&
+          refresh != null &&
+          refresh.isNotEmpty) {
+        _accessToken = token;
+        _refreshToken = refresh;
+        if (storedUser != null) {
+          final decoded = jsonDecode(storedUser);
+          if (decoded is Map<String, dynamic>) _setUser(decoded);
+        }
+        _status = AuthStatus.authenticated;
+        if (_isAccessTokenExpired(_accessToken!)) {
+          await _refreshAccessToken();
+        } else {
+          _scheduleRefresh();
+        }
       }
     } catch (_) {
       _status = AuthStatus.unauthenticated;
       _clearMemory();
+    } finally {
       notifyListeners();
     }
   }
@@ -258,12 +270,12 @@ class AuthProvider extends ChangeNotifier {
     _refreshTimer?.cancel();
     _status = AuthStatus.unauthenticated;
     _clearMemory();
+    notifyListeners();
     try {
-      await _secureStorage.deleteAll();
+      await _secureStorage.deleteAll().timeout(const Duration(seconds: 2));
     } catch (_) {
       // In-memory logout still takes effect if secure storage is unavailable.
     }
-    notifyListeners();
   }
 
   void _clearMemory() {

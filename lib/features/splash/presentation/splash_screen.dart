@@ -22,9 +22,16 @@ class _SplashScreenState extends State<SplashScreen> {
   Future<void> _redirect() async {
     await Future.delayed(const Duration(seconds: 1));
     if (!mounted) return;
+    _check();
+  }
 
+  void _check() {
+    if (!mounted) return;
     final auth = context.read<AuthProvider>();
-    if (auth.status == AuthStatus.unknown) return;
+    if (auth.status == AuthStatus.unknown) {
+      Future.delayed(const Duration(milliseconds: 300), _check);
+      return;
+    }
     if (auth.isAuthenticated) {
       if (auth.isBusiness) {
         context.go('/business');

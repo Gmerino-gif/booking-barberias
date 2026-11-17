@@ -614,10 +614,14 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
                             price: _services.first.price,
                             durationMin: _services.first.durationMin,
                           ),
+                    style: FilledButton.styleFrom(
+                      foregroundColor: Colors.white,
+                    ),
                     icon: const Icon(Icons.calendar_month),
                     label: Text(
                       'RESERVAR CITA',
                       style: theme.textTheme.labelLarge?.copyWith(
+                        color: Colors.white,
                         fontWeight: AppTypography.bold,
                         letterSpacing: 0.5,
                       ),
@@ -924,11 +928,12 @@ class _EstablishmentDetailScreenState extends State<EstablishmentDetailScreen> {
                   style: FilledButton.styleFrom(
                     padding: const EdgeInsets.symmetric(horizontal: 14),
                     minimumSize: const Size(0, 32),
+                    foregroundColor: Colors.white,
                   ),
                   child: Text(
                     'Reservar',
                     style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.onPrimary,
+                      color: Colors.white,
                     ),
                   ),
                 ),

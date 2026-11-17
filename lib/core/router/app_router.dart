@@ -41,7 +41,7 @@ class AppRouter {
       }
 
       if (auth.status == AuthStatus.unauthenticated) {
-        if (isPublicAuthRoute) return null;
+        if (isPublicAuthRoute && !isSplash) return null;
         return '/login';
       }
 

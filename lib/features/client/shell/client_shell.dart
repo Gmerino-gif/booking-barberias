@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../auth/presentation/logout_action.dart';
-
 class ClientShell extends StatefulWidget {
   final Widget child;
 
@@ -93,10 +91,11 @@ class _ClientShellState extends State<ClientShell> {
     final path = location.path;
     final index = _indexFromLocation(path);
     final isTabRoot = _isTabRoot(path);
+    final showShellAppBar = isTabRoot && path != '/client';
     final showBack = isTabRoot && _tabsWithBack.contains(path);
 
     return Scaffold(
-      appBar: isTabRoot
+      appBar: showShellAppBar
           ? AppBar(
               leading: showBack
                   ? IconButton(
@@ -106,13 +105,6 @@ class _ClientShellState extends State<ClientShell> {
                     )
                   : null,
               title: Text(_tabs[index].$3),
-              actions: [
-                IconButton(
-                  tooltip: 'Cerrar sesión',
-                  icon: const Icon(Icons.logout),
-                  onPressed: () => _logout(context),
-                ),
-              ],
             )
           : null,
       body: widget.child,
@@ -120,13 +112,9 @@ class _ClientShellState extends State<ClientShell> {
         selectedIndex: index,
         onDestinationSelected: (i) => context.go(_tabs[i].$1),
         destinations: _tabs
-            .map(
-              (t) => NavigationDestination(icon: Icon(t.$2), label: t.$3),
-            )
+            .map((t) => NavigationDestination(icon: Icon(t.$2), label: t.$3))
             .toList(),
       ),
     );
   }
-
-  Future<void> _logout(BuildContext context) => confirmAndLogout(context);
 }

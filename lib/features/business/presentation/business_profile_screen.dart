@@ -11,6 +11,7 @@ import 'package:provider/provider.dart';
 import '../../../core/network/api_config.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/image_edit_field.dart';
+import '../../auth/presentation/logout_action.dart';
 import '../../auth/providers/auth_provider.dart';
 
 class BusinessProfileScreen extends StatefulWidget {
@@ -486,6 +487,13 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
     }
   }
 
+  Future<void> _logout() => confirmAndLogout(
+    context,
+    confirmationMessage:
+        '¿Estás seguro de cerrar sesión? Tendrás que ingresar tus credenciales nuevamente.',
+    confirmLabel: 'Sí, salir',
+  );
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -851,6 +859,21 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
                             : const Icon(Icons.save_outlined),
                         label: Text(
                           _isSaving ? 'Guardando...' : 'Guardar cambios',
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      OutlinedButton.icon(
+                        onPressed: _isSaving ? null : _logout,
+                        icon: const Icon(Icons.logout),
+                        label: const Text('Cerrar sesión'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: theme.colorScheme.error,
+                          side: BorderSide(
+                            color: theme.colorScheme.error.withValues(
+                              alpha: 0.45,
+                            ),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
                         ),
                       ),
                     ],

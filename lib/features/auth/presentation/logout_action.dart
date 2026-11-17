@@ -14,7 +14,11 @@ bool _logoutFlowInProgress = false;
 ///
 /// Devuelve `true` solo si confirma la acción (al tocar fuera del diálogo o
 /// con "Cancelar" devuelve `false`).
-Future<bool> showLogoutConfirmation(BuildContext context) async {
+Future<bool> showLogoutConfirmation(
+  BuildContext context, {
+  String message = '¿Estás seguro que quieres cerrar sesión?',
+  String confirmLabel = 'Cerrar sesión',
+}) async {
   final theme = Theme.of(context);
   final confirmed = await showDialog<bool>(
     context: context,
@@ -23,7 +27,7 @@ Future<bool> showLogoutConfirmation(BuildContext context) async {
         borderRadius: BorderRadius.circular(AppRadius.lg),
       ),
       title: const Text('Cerrar sesión'),
-      content: const Text('¿Estás seguro que quieres cerrar sesión?'),
+      content: Text(message),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(dialogContext, false),
@@ -35,7 +39,7 @@ Future<bool> showLogoutConfirmation(BuildContext context) async {
             backgroundColor: theme.colorScheme.error,
             foregroundColor: theme.colorScheme.onError,
           ),
-          child: const Text('Cerrar sesión'),
+          child: Text(confirmLabel),
         ),
       ],
     ),
@@ -49,7 +53,11 @@ Future<bool> showLogoutConfirmation(BuildContext context) async {
 ///
 /// Es el único punto de salida del flujo: cualquier botón de "Cerrar sesión"
 /// debe llamar aquí para que la confirmación nunca se pueda omitir.
-Future<void> confirmAndLogout(BuildContext context) async {
+Future<void> confirmAndLogout(
+  BuildContext context, {
+  String confirmationMessage = '¿Estás seguro que quieres cerrar sesión?',
+  String confirmLabel = 'Cerrar sesión',
+}) async {
   if (_logoutFlowInProgress) return;
   _logoutFlowInProgress = true;
 
@@ -59,7 +67,13 @@ Future<void> confirmAndLogout(BuildContext context) async {
   final router = GoRouter.of(context);
 
   try {
-    if (!await showLogoutConfirmation(context)) return;
+    if (!await showLogoutConfirmation(
+      context,
+      message: confirmationMessage,
+      confirmLabel: confirmLabel,
+    )) {
+      return;
+    }
 
     await auth.logout();
     router.go('/login');

@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../auth/presentation/logout_action.dart';
-
 class BusinessShell extends StatelessWidget {
   final Widget child;
 
@@ -29,16 +27,7 @@ class BusinessShell extends StatelessWidget {
     final index = _indexFromLocation(location);
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(_tabs[index].$3),
-        actions: [
-          IconButton(
-            tooltip: 'Cerrar sesión',
-            icon: const Icon(Icons.logout),
-            onPressed: () => _logout(context),
-          ),
-        ],
-      ),
+      appBar: AppBar(title: Text(_tabs[index].$3)),
       body: child,
       bottomNavigationBar: NavigationBar(
         selectedIndex: index,
@@ -49,6 +38,4 @@ class BusinessShell extends StatelessWidget {
       ),
     );
   }
-
-  Future<void> _logout(BuildContext context) => confirmAndLogout(context);
 }

@@ -554,9 +554,11 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
             const SizedBox(height: 16),
             FilledButton(
               onPressed: canConfirm ? _confirmReservation : null,
+              style: FilledButton.styleFrom(foregroundColor: Colors.white),
               child: Text(
                 _isSubmitting ? 'CONFIRMANDO...' : 'CONFIRMAR RESERVA',
                 style: theme.textTheme.labelLarge?.copyWith(
+                  color: Colors.white,
                   fontWeight: AppTypography.bold,
                   letterSpacing: 0.5,
                 ),

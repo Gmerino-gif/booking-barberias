@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "886990630461",
+    "project_id": "barberfy-c1b92",
+    "storage_bucket": "barberfy-c1b92.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:886990630461:android:8972bd27040fba84084454",
+        "android_client_info": {
+          "package_name": "com.buking.booking_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDWsXCj4k9lKnIVo53_JD8XDTwf-8kxpwk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
