@@ -17,3 +17,5 @@ export const requireRole = (allowedRoles: UserRole[]) => {
     next();
   };
 };
+
+export const requireSuperAdmin = requireRole(['superadmin']);

@@ -69,9 +69,10 @@ export const createBooking = async (req: AuthenticatedRequest, res: Response): P
 
     const bookingId = new Types.ObjectId();
     const intervalMs = 30 * 60 * 1000;
-    const establishment = await Establishment.findById(establishmentId).select(
-      'openingMinutes ownerId',
-    );
+    const establishment = await Establishment.findOne({
+      _id: establishmentId,
+      isActive: { $ne: false },
+    }).select('openingMinutes ownerId');
     if (!establishment) {
       res.status(404).json({ message: 'Establecimiento no encontrado' });
       return;

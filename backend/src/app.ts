@@ -9,11 +9,13 @@ import professionalRoutes from './routes/professional.routes.js';
 import reviewRoutes from './routes/review.routes.js';
 import serviceRoutes from './routes/service.routes.js';
 import uploadRoutes from './routes/upload.routes.js';
+import adminRoutes from './routes/admin.routes.js';
 import { UPLOADS_ROUTE_PREFIX, uploadsDirectory } from './utils/uploads.js';
 
 const app = express();
 
 app.use(cors({
+  credentials: true,
   origin: (origin, callback) => {
     const corsOrigins = (process.env.CORS_ORIGINS ?? '')
       .split(',')
@@ -47,6 +49,7 @@ app.get('/api/health', (_req, res) => {
 
 // Rutas del sistema
 app.use('/api/auth', authRoutes);
+app.use('/api/admin', adminRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/establishments', establishmentRoutes);
 app.use('/api/favorites', favoriteRoutes);

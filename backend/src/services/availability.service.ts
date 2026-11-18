@@ -18,7 +18,10 @@ export const getAvailableSlots = async (input: AvailabilityInput): Promise<strin
   const [professional, service, establishment] = await Promise.all([
     Professional.findOne({ _id: input.professionalId, establishmentId: input.establishmentId }),
     Service.findOne({ _id: input.serviceId, establishmentId: input.establishmentId }),
-    Establishment.findById(input.establishmentId).select('openingMinutes closingMinutes'),
+    Establishment.findOne({
+      _id: input.establishmentId,
+      isActive: { $ne: false },
+    }).select('openingMinutes closingMinutes'),
   ]);
 
   if (!professional || !service || !establishment) return [];

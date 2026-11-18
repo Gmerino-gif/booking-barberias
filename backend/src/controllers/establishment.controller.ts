@@ -68,13 +68,14 @@ const validateEstablishmentInput = (
 export const getEstablishments = async (req: Request, res: Response): Promise<void> => {
   try {
     const query = typeof req.query.q === 'string' ? req.query.q.trim() : '';
-    const filter = query ? {
-      $or: [
+    const filter: Record<string, unknown> = { isActive: { $ne: false } };
+    if (query) {
+      filter.$or = [
         { name: { $regex: query, $options: 'i' } },
         { city: { $regex: query, $options: 'i' } },
         { address: { $regex: query, $options: 'i' } },
-      ],
-    } : {};
+      ];
+    }
     const establishments = await Establishment.find(filter).limit(50);
     res.status(200).json({ establishments });
   } catch {
@@ -91,7 +92,10 @@ export const getEstablishmentById = async (req: Request, res: Response): Promise
   }
 
   try {
-    const establishment = await Establishment.findById(establishmentId);
+    const establishment = await Establishment.findOne({
+      _id: establishmentId,
+      isActive: { $ne: false },
+    });
     if (!establishment) {
       res.status(404).json({ message: 'Establecimiento no encontrado' });
       return;
@@ -158,6 +162,7 @@ export const getNearby = async (req: Request, res: Response): Promise<void> => {
 
   try {
     const establishments = await Establishment.find({
+      isActive: { $ne: false },
       location: {
         $near: {
           $geometry: { type: 'Point', coordinates: [lng, lat] },

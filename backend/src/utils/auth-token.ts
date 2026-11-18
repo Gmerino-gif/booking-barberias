@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken';
 import type { JwtPayload } from 'jsonwebtoken';
-import type { UserRole } from '../models/User.js';
+import { USER_ROLES, type UserRole } from '../models/User.js';
 
 export interface AuthTokenPayload extends JwtPayload {
   sub: string;
@@ -49,8 +49,7 @@ export const verifyAuthToken = (
   expectedType: AuthTokenPayload['tokenType'],
 ): AuthTokenPayload => {
   const payload = jwt.verify(token, getJwtSecret());
-  const validRoles: readonly string[] = ['client', 'owner', 'professional', 'admin'];
-
+  const validRoles: readonly string[] = USER_ROLES;
   if (
     typeof payload === 'string' ||
     typeof payload.sub !== 'string' ||

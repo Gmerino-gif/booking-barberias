@@ -13,6 +13,12 @@ const establishmentSchema = new Schema(
     address: { type: String, required: true, trim: true, maxlength: 200 },
     city: { type: String, required: true, trim: true, maxlength: 100 },
     phone: { type: String, required: true, trim: true, maxlength: 20 },
+    isActive: { type: Boolean, default: true },
+    subscriptionStatus: { type: String, enum: ['trial', 'active', 'suspended'], default: 'trial' },
+    subscriptionExpiresAt: {
+      type: Date,
+      default: () => new Date(Date.now() + 15 * 24 * 60 * 60 * 1000),
+    },
     rating: { type: Number, default: 0, min: 0, max: 5 },
     openingMinutes: { type: Number, default: 540, min: 0, max: 1439 },
     closingMinutes: { type: Number, default: 1080, min: 1, max: 1440 },
