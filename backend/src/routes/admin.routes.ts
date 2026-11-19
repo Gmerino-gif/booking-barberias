@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import {
+  approveManualPayment,
+  getPendingManualPayments,
   getAdminEstablishments,
   renewEstablishment,
   toggleEstablishment,
@@ -13,5 +15,7 @@ router.use(authenticate, requireSuperAdmin);
 router.get('/establishments', getAdminEstablishments);
 router.patch('/establishments/:id/toggle', toggleEstablishment);
 router.patch('/establishments/:id/renew', renewEstablishment);
+router.get('/payments/pending', getPendingManualPayments);
+router.patch('/payments/:id/approve', approveManualPayment);
 
 export default router;

@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../../../core/theme/app_theme.dart';
+import 'barber_logo_avatar.dart';
+
 // ============================================================
 // MODELO DE BARBERÍA CON UBICACIÓN
 // ============================================================
@@ -15,8 +18,7 @@ class NearbyBarber {
   final String address;
   final String phone;
 
-  /// Logo del negocio (referencia `/uploads/...` o URL) que se muestra en el
-  /// listado de barberías cercanas.
+  /// URL absoluta del logo del negocio, lista para mostrarse en el mapa.
   final String? logo;
 
   const NearbyBarber({
@@ -158,37 +160,16 @@ class _NearbyMapState extends State<NearbyMap> {
                 markers: widget.barbers.map((barber) {
                   return Marker(
                     point: LatLng(barber.lat, barber.lng),
-                    width: 40,
-                    height: 40,
-                    child: GestureDetector(
+                    width: 136,
+                    height: 68,
+                    alignment: Alignment.topCenter,
+                    child: _BarberMapMarker(
+                      key: ValueKey(barber.id),
+                      barber: barber,
                       onTap: () {
                         widget.onBarberTap?.call(barber);
-                        _mapController.move(
-                          LatLng(barber.lat, barber.lng),
-                          15,
-                        );
+                        _mapController.move(LatLng(barber.lat, barber.lng), 15);
                       },
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.primary,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: theme.colorScheme.secondary,
-                            width: 2,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.3),
-                              blurRadius: 4,
-                            ),
-                          ],
-                        ),
-                        child: const Icon(
-                          Icons.content_cut,
-                          color: Colors.white,
-                          size: 18,
-                        ),
-                      ),
                     ),
                   );
                 }).toList(),
@@ -260,4 +241,62 @@ class _NearbyMapState extends State<NearbyMap> {
       ),
     );
   }
+}
+
+class _BarberMapMarker extends StatelessWidget {
+  const _BarberMapMarker({
+    super.key,
+    required this.barber,
+    required this.onTap,
+  });
+
+  final NearbyBarber barber;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    behavior: HitTestBehavior.opaque,
+    onTap: onTap,
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.start,
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: AppColors.accent, width: 2),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.24),
+                blurRadius: 4,
+                offset: const Offset(0, 1),
+              ),
+            ],
+          ),
+          child: BarberLogoAvatar(logoUrl: barber.logo, radius: 17),
+        ),
+        const SizedBox(height: 3),
+        Container(
+          constraints: const BoxConstraints(maxWidth: 132),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: AppColors.darkSurface.withValues(alpha: 0.92),
+            borderRadius: BorderRadius.circular(AppRadius.sm),
+            border: Border.all(color: AppColors.accent.withValues(alpha: 0.45)),
+          ),
+          child: Text(
+            barber.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: AppColors.darkTextPrimary,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              height: 1.2,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
 }

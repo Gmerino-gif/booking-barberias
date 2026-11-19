@@ -35,6 +35,7 @@ En modo debug, Android usa `10.0.2.2:3000` y otras plataformas usan `localhost:3
 - Usa `backend/.env.production.example` como lista de variables: `NODE_ENV=production`, `MONGODB_URI` con TLS, `JWT_SECRET` aleatorio de al menos 32 bytes, credenciales SMTP, `CORS_ORIGINS` con cada origen HTTPS exacto y `PORT` si el proveedor lo requiere.
 - Genera el secreto JWT con `node -e "console.log(require('node:crypto').randomBytes(48).toString('base64url'))"` y guárdalo en el gestor de secretos del proveedor.
 - Publica el backend detrás de HTTPS y comprueba `GET /api/health`.
+- Configura `SUBSCRIPTION_PRICE_COP` y las credenciales/webhook de Wompi en el gestor de secretos del backend. Los datos públicos para transferencia manual se pueden mostrar en la app mediante `--dart-define=SUBSCRIPTION_TRANSFER_DETAILS=...` al compilar; sustituye `...` por las instrucciones de pago de tu negocio.
 - Compila cada plataforma con el dominio real del API:
 
   ```powershell
@@ -49,4 +50,4 @@ En modo debug, Android usa `10.0.2.2:3000` y otras plataformas usan `localhost:3
 
 ## Alcance del MVP
 
-El MVP reserva citas y registra el precio en la reserva; el pago se realiza en el local. No incluye cobro en línea ni notificaciones push. El estado de las citas se gestiona desde la agenda del negocio y las reseñas requieren una cita completada.
+El MVP reserva citas y registra el precio en la reserva; el pago de las citas se realiza en el local. La suscripción del negocio se puede renovar con Wompi o reportando una transferencia para revisión manual. El estado de las citas se gestiona desde la agenda del negocio y las reseñas requieren una cita completada.

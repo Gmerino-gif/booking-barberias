@@ -2,12 +2,23 @@ import type { Request, Response } from 'express';
 import { Types } from 'mongoose';
 import { Booking } from '../models/Booking.js';
 import { Establishment } from '../models/Establishment.js';
+import { Payment } from '../models/Payment.js';
 import { Professional } from '../models/Professional.js';
+import { approveManualSubscriptionPayment } from '../services/wompi.service.js';
 
 const getEstablishmentId = (req: Request, res: Response): string | null => {
   const id = typeof req.params.id === 'string' ? req.params.id.trim() : '';
   if (!Types.ObjectId.isValid(id)) {
     res.status(400).json({ message: 'El ID del establecimiento no es válido' });
+    return null;
+  }
+  return id;
+};
+
+const getPaymentId = (req: Request, res: Response): string | null => {
+  const id = typeof req.params.id === 'string' ? req.params.id.trim() : '';
+  if (!Types.ObjectId.isValid(id)) {
+    res.status(400).json({ message: 'El ID del pago no es válido' });
     return null;
   }
   return id;
@@ -130,5 +141,42 @@ export const renewEstablishment = async (req: Request, res: Response): Promise<v
     res.status(200).json({ establishment });
   } catch {
     res.status(500).json({ message: 'No se pudo renovar la suscripción del establecimiento' });
+  }
+};
+
+export const getPendingManualPayments = async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const payments = await Payment.find({ method: 'manual_transfer', status: 'pending' })
+      .populate('establishment', 'name address phone')
+      .sort({ createdAt: 1 });
+    res.status(200).json({ payments });
+  } catch {
+    res.status(500).json({ message: 'No se pudieron obtener los comprobantes pendientes' });
+  }
+};
+
+export const approveManualPayment = async (req: Request, res: Response): Promise<void> => {
+  const paymentId = getPaymentId(req, res);
+  if (!paymentId) return;
+
+  try {
+    const result = await approveManualSubscriptionPayment(paymentId);
+    if (result === 'not_found') {
+      res.status(404).json({ message: 'Pago manual no encontrado' });
+      return;
+    }
+    if (result === 'not_pending') {
+      res.status(409).json({ message: 'El pago manual ya no está pendiente' });
+      return;
+    }
+
+    res.status(200).json({
+      message: result === 'already_approved'
+        ? 'El pago manual ya estaba aprobado'
+        : 'Pago manual aprobado y suscripción renovada',
+    });
+  } catch (error) {
+    console.error('No se pudo aprobar el pago manual', error);
+    res.status(500).json({ message: 'No se pudo aprobar el pago manual' });
   }
 };

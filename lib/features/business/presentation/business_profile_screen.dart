@@ -13,6 +13,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/image_edit_field.dart';
 import '../../auth/presentation/logout_action.dart';
 import '../../auth/providers/auth_provider.dart';
+import 'business_subscription_section.dart';
 
 class BusinessProfileScreen extends StatefulWidget {
   const BusinessProfileScreen({super.key});
@@ -516,6 +517,8 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
+                      const SizedBox(height: 20),
+                      const BusinessSubscriptionSection(),
                       const SizedBox(height: 20),
                       TextFormField(
                         controller: _nameCtrl,

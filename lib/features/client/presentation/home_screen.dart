@@ -11,6 +11,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../../../core/network/api_config.dart';
 import '../../../core/utils/image_urls.dart';
+import 'widgets/barber_logo_avatar.dart';
 import 'widgets/nearby_map.dart';
 
 class ClientHomeScreen extends StatefulWidget {
@@ -77,6 +78,21 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
 
   double _radians(double degrees) => degrees * math.pi / 180;
 
+  String? _resolveBarberLogo(Object? value) {
+    if (value is! String || value.trim().isEmpty) return null;
+    final logo = value.trim();
+    final uri = Uri.tryParse(logo);
+    if (uri == null) return null;
+    if (uri.hasScheme &&
+        ((uri.scheme.toLowerCase() != 'http' &&
+                uri.scheme.toLowerCase() != 'https') ||
+            !uri.hasAuthority ||
+            uri.host.isEmpty)) {
+      return null;
+    }
+    return AppImageUrls.resolve(logo);
+  }
+
   Future<Position> _getCurrentPosition() async {
     if (!await Geolocator.isLocationServiceEnabled()) {
       throw StateError('Activa los servicios de ubicación para usar el GPS.');
@@ -134,13 +150,6 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
     }
   }
 
-  /// Logo del negocio resuelto a una imagen mostrable (o `null` para usar el
-  /// icono por defecto del [CircleAvatar]).
-  ImageProvider<Object>? _logoProvider(String? logo) {
-    final url = AppImageUrls.resolve(logo);
-    return url == null ? null : NetworkImage(url);
-  }
-
   void _onMapCenterChanged(LatLng center) {
     _mapLat = center.latitude;
     _mapLng = center.longitude;
@@ -188,7 +197,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
               rating: (item['rating'] as num?)?.toDouble() ?? 0,
               address: item['address'] as String? ?? '',
               phone: item['phone'] as String? ?? '',
-              logo: (item['logo'] as String?)?.trim(),
+              logo: _resolveBarberLogo(item['logo']),
             );
           })
           .where((barber) => barber.id.isNotEmpty)
@@ -309,10 +318,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                   (barber) => Card(
                     margin: const EdgeInsets.only(bottom: 8),
                     child: ListTile(
-                      leading: CircleAvatar(
-                        foregroundImage: _logoProvider(barber.logo),
-                        child: const Icon(Icons.content_cut),
-                      ),
+                      leading: BarberLogoAvatar(logoUrl: barber.logo),
                       title: Text(barber.name),
                       subtitle: Text(
                         barber.address.isEmpty
