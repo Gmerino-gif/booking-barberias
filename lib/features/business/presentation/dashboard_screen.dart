@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/network/api_config.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/contact_links.dart';
 import '../../../core/utils/formatters.dart';
 import '../../auth/providers/auth_provider.dart';
 
@@ -995,6 +996,53 @@ class _BusinessAgendaScreenState extends State<BusinessAgendaScreen>
     }
   }
 
+  /// Mensaje inicial de WhatsApp: la forma más simple (y sin costo) de
+  /// reducir inasistencias es pedirle al cliente que confirme la cita o avise
+  /// si necesita moverla.
+  String _whatsAppMessage(_BookingSummary booking) {
+    final date = _dayHeading(booking.startAt, includeYear: false);
+    final time = _formatTime(booking.startAt);
+    return '¡Hola ${booking.clientName}! Te escribimos por tu reserva de '
+        '${booking.serviceName} ($date a las $time). '
+        '¿Nos confirmas tu asistencia? Si necesitas cambiar la hora, '
+        'avísanos por aquí y lo ajustamos.';
+  }
+
+  /// Abre el marcador o WhatsApp con el teléfono del cliente.
+  ///
+  /// El teléfono se normaliza primero; si no es válido no se abre ningún
+  /// enlace roto, se avisa al negocio y no se altera nada del estado de la
+  /// reserva.
+  Future<void> _contactClient(
+    _BookingSummary booking, {
+    required bool whatsApp,
+  }) async {
+    final channel = whatsApp ? 'WhatsApp' : 'el marcador';
+    final phone = AppContactLinks.normalizeColombianPhone(booking.clientPhone);
+    if (phone == null) {
+      _showAppSnackBar(
+        context,
+        'El teléfono de ${booking.clientName} no es válido para abrir $channel',
+        isError: true,
+      );
+      return;
+    }
+
+    final uri = whatsApp
+        ? AppContactLinks.whatsAppUri(
+            phone,
+            message: _whatsAppMessage(booking),
+          )
+        : AppContactLinks.telUri(phone);
+    final opened = await AppContactLinks.launch(uri);
+    if (opened || !mounted) return;
+    _showAppSnackBar(
+      context,
+      'No se pudo abrir $channel en este dispositivo',
+      isError: true,
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -1407,25 +1455,6 @@ class _BusinessAgendaScreenState extends State<BusinessAgendaScreen>
                       '${_formatTime(booking.startAt)} - '
                       '${_formatTime(booking.endAt)}',
                     ),
-                    if (booking.clientPhone != null) ...[
-                      const SizedBox(height: AppSpacing.xs),
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.phone,
-                            size: 13,
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                          const SizedBox(width: AppSpacing.xs),
-                          Expanded(
-                            child: Text(
-                              booking.clientPhone!,
-                              style: theme.textTheme.bodySmall,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
                   ],
                 ),
               ),
@@ -1467,11 +1496,91 @@ class _BusinessAgendaScreenState extends State<BusinessAgendaScreen>
               ),
             ],
           ),
+          // Contacto rápido con el cliente. El teléfono y los dos accesos
+          // (llamar / WhatsApp) van en una fila de ancho completo para que los
+          // botones tengan área táctil cómoda en móvil sin apretar el resto de
+          // la tarjeta.
+          if (booking.clientPhone != null) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Row(
+              children: [
+                Icon(
+                  Icons.phone,
+                  size: 13,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: AppSpacing.xs),
+                Expanded(
+                  child: Text(
+                    booking.clientPhone!,
+                    style: theme.textTheme.bodySmall,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                _QuickContactButton(
+                  icon: Icons.call,
+                  color: theme.colorScheme.primary,
+                  tooltip: 'Llamar a ${booking.clientName}',
+                  onPressed: () => _contactClient(booking, whatsApp: false),
+                ),
+                const SizedBox(width: AppSpacing.xs),
+                _QuickContactButton(
+                  icon: Icons.chat_bubble_outline,
+                  color: AppColors.success,
+                  tooltip: 'WhatsApp a ${booking.clientName}',
+                  onPressed: () => _contactClient(booking, whatsApp: true),
+                ),
+              ],
+            ),
+          ],
           if (booking.review != null) ...[
             const SizedBox(height: AppSpacing.sm),
             _BookingReviewSummary(review: booking.review!),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// Botón compacto de contacto (llamar / WhatsApp) para las tarjetas de la
+/// agenda: 40x40 de área táctil y solo un icono, para que quepa en móvil sin
+/// agrandar la tarjeta.
+class _QuickContactButton extends StatelessWidget {
+  const _QuickContactButton({
+    required this.icon,
+    required this.color,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Semantics(
+        button: true,
+        label: tooltip,
+        child: InkWell(
+          onTap: onPressed,
+          customBorder: const CircleBorder(),
+          child: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.14),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, size: 20, color: color),
+          ),
+        ),
       ),
     );
   }
