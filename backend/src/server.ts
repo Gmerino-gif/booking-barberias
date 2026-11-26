@@ -1,5 +1,6 @@
-import dotenv from 'dotenv';
-dotenv.config();
+// Debe ser la PRIMERA importación: carga el .env (resuelto como backend/.env,
+// sin depender del cwd) antes de que se evalúe cualquier otro módulo.
+import './config/bootstrap-env.js';
 
 import app from './app.js';
 import { connectDB } from './config/database.js';
@@ -9,12 +10,14 @@ import { Booking } from './models/Booking.js';
 import { assertJwtSecret } from './utils/auth-token.js';
 import { initializeFirebaseAdmin } from './services/push-notification.service.js';
 import { startBookingReminderScheduler } from './services/booking-reminder.service.js';
+import { logWompiConfiguration } from './services/wompi.service.js';
 
 const PORT = Number(process.env.PORT || 3000);
 
 async function main() {
   validateRuntimeEnvironment();
   assertJwtSecret();
+  logWompiConfiguration();
   initializeFirebaseAdmin();
   await connectDB();
   await BookingSlotLock.createIndexes();

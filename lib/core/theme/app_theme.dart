@@ -38,6 +38,11 @@ class AppColors {
   static const Color info = Color(0xFF0284C7);
   static const Color neutral = Color(0xFF6B7280);
 
+  // Snack bars: fondo siempre oscuro para garantizar contraste con texto blanco.
+  static const Color snackBarBackground = Color(0xFF1E293B);
+  static const Color snackBarErrorBackground = Color(0xFF7F1D1D);
+  static const Color snackBarForeground = Color(0xFFFFFFFF);
+
   /// Status colors used by bookings/agenda badges.
   static Color forStatus(String status) {
     switch (status.toLowerCase()) {
@@ -278,9 +283,15 @@ class AppTheme {
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
+        // Fondo oscuro fijo (independiente del brillo del tema) para que el
+        // texto blanco siempre tenga contraste legible.
+        backgroundColor: AppColors.snackBarBackground,
         contentTextStyle: textTheme.bodyMedium?.copyWith(
-          color: AppColors.onPrimary,
+          color: AppColors.snackBarForeground,
         ),
+        actionTextColor: AppColors.accent,
+        elevation: 6,
+        insetPadding: const EdgeInsets.all(AppSpacing.md),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.md),
         ),

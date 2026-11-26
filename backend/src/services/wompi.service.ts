@@ -1,10 +1,14 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import mongoose, { type ClientSession } from 'mongoose';
+import { describeEnvSource } from '../config/env-loader.js';
 import { Establishment } from '../models/Establishment.js';
 import { Payment } from '../models/Payment.js';
 
-const DEFAULT_SANDBOX_URL = 'https://sandbox.wompi.co/v1';
-const DEFAULT_PRODUCTION_URL = 'https://production.wompi.co/v1';
+const WOMPI_SANDBOX_BASE_URL = 'https://sandbox.wompi.co/v1';
+const WOMPI_PRODUCTION_BASE_URL = 'https://production.wompi.co/v1';
+const WOMPI_TEST_PRIVATE_KEY_PREFIX = 'prv_test_';
+const WOMPI_PRODUCTION_PRIVATE_KEY_PREFIX = 'prv_prod_';
+const WOMPI_PUBLIC_KEY_PREFIX = 'pub_';
 const SUBSCRIPTION_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
 
 type JsonRecord = Record<string, unknown>;
@@ -31,43 +35,106 @@ export const getSubscriptionPriceCop = (): number => {
   return price;
 };
 
-const getWompiBaseUrl = (): string => {
-  const configuredUrl = process.env.WOMPI_BASE_URL?.trim();
-  const baseUrl = configuredUrl || (
-    process.env.NODE_ENV === 'production' ? DEFAULT_PRODUCTION_URL : DEFAULT_SANDBOX_URL
+export type WompiEnvironment = 'sandbox' | 'production';
+
+/**
+ * La URL base de la API de Wompi se deriva **siempre** del prefijo de la llave
+ * privada (`prv_test_` → sandbox, `prv_prod_` → producción) y nunca de una
+ * variable de entorno suelta, de modo que no pueda quedar desincronizada con
+ * las credenciales y provocar rechazos 401.
+ */
+export const getWompiBaseUrl = (privateKey: string): string => {
+  if (privateKey.startsWith(WOMPI_TEST_PRIVATE_KEY_PREFIX)) {
+    return WOMPI_SANDBOX_BASE_URL;
+  }
+  if (privateKey.startsWith(WOMPI_PRODUCTION_PRIVATE_KEY_PREFIX)) {
+    return WOMPI_PRODUCTION_BASE_URL;
+  }
+  throw new WompiError(
+    'WOMPI_PRIVATE_KEY debe iniciar con prv_test_ o prv_prod_',
+    503,
   );
-  let parsedUrl: URL;
+};
+
+const readWompiPrivateKey = (): string => {
+  const privateKey = process.env.WOMPI_PRIVATE_KEY?.trim();
+  if (!privateKey) {
+    throw new WompiError('WOMPI_PRIVATE_KEY no está configurada', 503);
+  }
+  if (privateKey.startsWith(WOMPI_PUBLIC_KEY_PREFIX)) {
+    throw new WompiError(
+      'WOMPI_PRIVATE_KEY debe contener la llave privada (prv_...) y no la pública (pub_...)',
+      503,
+    );
+  }
+  return privateKey;
+};
+
+/**
+ * `WOMPI_BASE_URL` quedó obsoleto: se conserva solo para avisar en logs si
+ * todavía está configurada y no coincide con el entorno de la llave privada.
+ */
+const warnIfLegacyBaseUrlIsOutOfSync = (expectedBaseUrl: string): void => {
+  const configuredUrl = process.env.WOMPI_BASE_URL?.trim().replace(/\/+$/, '');
+  if (configuredUrl && configuredUrl !== expectedBaseUrl) {
+    console.warn(
+      'WOMPI_BASE_URL se ignora: la URL de Wompi se deriva de WOMPI_PRIVATE_KEY',
+      { configuredUrl, expectedBaseUrl },
+    );
+  }
+};
+
+const getWompiEnvironment = (privateKey: string): WompiEnvironment =>
+  privateKey.startsWith(WOMPI_TEST_PRIVATE_KEY_PREFIX) ? 'sandbox' : 'production';
+
+/** Descripción segura de la llave: nunca incluye el secreto completo. */
+const describePrivateKey = (privateKey: string): { privateKeyPrefix: string; privateKeyLength: number } => ({
+  privateKeyPrefix: `${privateKey.slice(0, WOMPI_TEST_PRIVATE_KEY_PREFIX.length)}***`,
+  privateKeyLength: privateKey.length,
+});
+
+/**
+ * Deja en el log, al arrancar el servidor, con qué credenciales y contra qué
+ * entorno se hablará con Wompi. Sirve para detectar de inmediato una llave
+ * vieja o una variable del sistema que esté ganando sobre el `.env`.
+ */
+export const logWompiConfiguration = (): void => {
   try {
-    parsedUrl = new URL(baseUrl);
-  } catch {
-    throw new WompiError('WOMPI_BASE_URL no contiene una URL válida', 503);
+    const privateKey = readWompiPrivateKey();
+    console.log('Configuración de Wompi resuelta', {
+      environment: getWompiEnvironment(privateKey),
+      baseUrl: getWompiBaseUrl(privateKey),
+      ...describePrivateKey(privateKey),
+      source: describeEnvSource('WOMPI_PRIVATE_KEY'),
+      legacyBaseUrlIgnored: process.env.WOMPI_BASE_URL?.trim() || null,
+    });
+  } catch (error) {
+    console.warn('La configuración de Wompi no está lista', {
+      message: error instanceof Error ? error.message : String(error),
+      source: describeEnvSource('WOMPI_PRIVATE_KEY'),
+    });
   }
-  if (parsedUrl.protocol !== 'https:') {
-    throw new WompiError('WOMPI_BASE_URL debe usar HTTPS', 503);
-  }
-  return baseUrl.replace(/\/+$/, '');
 };
 
 export const createWompiPaymentLink = async (input: {
   amountCop: number;
   establishmentName: string;
 }): Promise<{ id: string }> => {
-  const privateKey = process.env.WOMPI_PRIVATE_KEY?.trim();
-  if (!privateKey) {
-    throw new WompiError('WOMPI_PRIVATE_KEY no está configurada', 503);
-  }
+  const privateKey = readWompiPrivateKey();
+  const baseUrl = getWompiBaseUrl(privateKey);
+  warnIfLegacyBaseUrlIsOutOfSync(baseUrl);
   const amountInCents = input.amountCop * 100;
   if (!Number.isSafeInteger(amountInCents)) {
     throw new WompiError('El monto de la suscripción no es válido', 503);
   }
-  const paymentLinksUrl = `${getWompiBaseUrl()}/payment_links`;
+  const paymentLinksUrl = `${baseUrl}/payment_links`;
 
   let response: Response;
   try {
     response = await fetch(paymentLinksUrl, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${privateKey}`,
+        Authorization: `Bearer ${privateKey.trim()}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -84,14 +151,36 @@ export const createWompiPaymentLink = async (input: {
     throw new WompiError('No fue posible conectar con Wompi');
   }
 
-  let responseBody: unknown;
+  const rawBody = await response.text();
+  let responseBody: unknown = null;
   try {
-    responseBody = JSON.parse(await response.text()) as unknown;
+    responseBody = rawBody.length > 0 ? (JSON.parse(rawBody) as unknown) : null;
   } catch {
-    throw new WompiError('Wompi devolvió una respuesta inválida');
+    responseBody = null;
   }
+
   if (!response.ok) {
+    // Se registra el cuerpo completo del error de Wompi (equivalente a
+    // `error.response?.data`) para poder diagnosticar rechazos como el 401.
+    console.error('Wompi rechazó la creación del link de pago', {
+      status: response.status,
+      statusText: response.statusText,
+      url: paymentLinksUrl,
+      environment: getWompiEnvironment(privateKey),
+      ...describePrivateKey(privateKey),
+      source: describeEnvSource('WOMPI_PRIVATE_KEY'),
+      response: isRecord(responseBody) ? responseBody.error ?? responseBody : rawBody,
+      ...(response.status === 401
+        ? {
+            hint: 'WOMPI_PRIVATE_KEY debe ser la llave privada (prv_...) del mismo comercio y del mismo entorno que la URL. Revisa que no tenga comillas ni espacios, y que ninguna variable de entorno del sistema esté sobrescribiendo el .env.',
+          }
+        : {}),
+    });
     throw new WompiError(`Wompi rechazó la creación del link (${response.status})`);
+  }
+
+  if (responseBody === null) {
+    throw new WompiError('Wompi devolvió una respuesta inválida');
   }
 
   const data = isRecord(responseBody) && isRecord(responseBody.data)

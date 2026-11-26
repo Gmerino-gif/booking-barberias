@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
+import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { validateRuntimeEnvironment } from '../dist/config/env.js';
+import { applyEnvFile, ENV_FILE_PATH } from '../dist/config/env-loader.js';
 
 test('la configuración de desarrollo admite SMTP y CORS opcionales', () => {
   const original = new Map(
@@ -56,4 +58,49 @@ test('producción exige SMTP y orígenes CORS HTTPS exactos', () => {
       else process.env[key] = value;
     }
   }
+});
+
+test('el .env se resuelve relativo al backend y no al directorio de trabajo', () => {
+  assert.equal(ENV_FILE_PATH, fileURLToPath(new URL('../.env', import.meta.url)));
+});
+
+test('fuera de producción el .env sobrescribe un valor viejo del proceso', () => {
+  const env = { NODE_ENV: 'development', NODE_PORT: '3000', WOMPI_PRIVATE_KEY: 'prv_test_vieja' };
+  const outcome = applyEnvFile({
+    path: '/app/backend/.env',
+    env,
+    readFile: () => 'WOMPI_PRIVATE_KEY=prv_test_nueva\n',
+  });
+
+  assert.equal(outcome.loaded, true);
+  assert.equal(env.WOMPI_PRIVATE_KEY, 'prv_test_nueva');
+  assert.deepEqual(outcome.applied, ['WOMPI_PRIVATE_KEY']);
+  assert.deepEqual(outcome.conflicts, [{ key: 'WOMPI_PRIVATE_KEY', winner: 'file' }]);
+});
+
+test('en producción las variables del proceso tienen prioridad sobre el .env', () => {
+  const env = { NODE_ENV: 'production', WOMPI_PRIVATE_KEY: 'prv_prod_real' };
+  const outcome = applyEnvFile({
+    path: '/app/backend/.env',
+    env,
+    readFile: () => 'WOMPI_PRIVATE_KEY=prv_test_vieja\n',
+  });
+
+  assert.equal(env.WOMPI_PRIVATE_KEY, 'prv_prod_real');
+  assert.deepEqual(outcome.applied, []);
+  assert.deepEqual(outcome.conflicts, [{ key: 'WOMPI_PRIVATE_KEY', winner: 'process' }]);
+});
+
+test('no falla cuando el .env no existe en la ruta resuelta', () => {
+  const outcome = applyEnvFile({
+    path: '/ruta/inexistente/.env',
+    env: { NODE_ENV: 'development' },
+    readFile: () => {
+      throw new Error('ENOENT');
+    },
+  });
+
+  assert.equal(outcome.loaded, false);
+  assert.deepEqual(outcome.applied, []);
+  assert.deepEqual(outcome.conflicts, []);
 });

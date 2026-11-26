@@ -197,19 +197,14 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
 
     final token = context.read<AuthProvider>().accessToken;
     if (token == null || token.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Tu sesión expiró. Inicia sesión otra vez.'),
-        ),
-      );
+      _showSnackBar('Tu sesión expiró. Inicia sesión otra vez.', isError: true);
       return;
     }
 
     if (_selectedLocation == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Selecciona la ubicación del negocio en el mapa.'),
-        ),
+      _showSnackBar(
+        'Selecciona la ubicación del negocio en el mapa.',
+        isError: true,
       );
       return;
     }
@@ -245,43 +240,22 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
 
       if (response.statusCode == 200 && decoded is Map<String, dynamic>) {
         _locationConfirmed = true;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Negocio actualizado correctamente.')),
-        );
+        _showSnackBar('Negocio actualizado correctamente.');
       } else {
         final message = decoded is Map<String, dynamic>
             ? decoded['message'] as String?
             : null;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(message ?? 'No se pudo actualizar el negocio.'),
-          ),
+        _showSnackBar(
+          message ?? 'No se pudo actualizar el negocio.',
+          isError: true,
         );
       }
     } on TimeoutException {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('El servidor tardó demasiado en responder.'),
-          ),
-        );
-      }
+      _showSnackBar('El servidor tardó demasiado en responder.', isError: true);
     } on http.ClientException {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('No fue posible conectar con el servidor.'),
-          ),
-        );
-      }
+      _showSnackBar('No fue posible conectar con el servidor.', isError: true);
     } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Ocurrió un error al guardar el negocio.'),
-          ),
-        );
-      }
+      _showSnackBar('Ocurrió un error al guardar el negocio.', isError: true);
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -305,11 +279,7 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
     final nextOpening = opening ? minutes : _openingMinutes;
     final nextClosing = opening ? _closingMinutes : minutes;
     if (nextOpening >= nextClosing) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('La apertura debe ser anterior al cierre'),
-        ),
-      );
+      _showSnackBar('La apertura debe ser anterior al cierre', isError: true);
       return;
     }
     setState(() {
@@ -462,6 +432,26 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
     });
     _locationFieldKey.currentState?.didChange(point);
     if (_mapReady) _mapController.move(point, 15);
+  }
+
+  /// SnackBar con fondo oscuro y texto blanco para garantizar contraste;
+  /// los errores usan además un rojo oscuro.
+  void _showSnackBar(String message, {bool isError = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            message,
+            style: const TextStyle(color: AppColors.snackBarForeground),
+          ),
+          backgroundColor: isError
+              ? AppColors.snackBarErrorBackground
+              : AppColors.snackBarBackground,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
   }
 
   void _showLocationMessage(String message, {bool isError = false}) {

@@ -69,6 +69,26 @@ class _BusinessProfessionalsScreenState
         : fallback;
   }
 
+  /// SnackBar con fondo oscuro y texto blanco para garantizar contraste;
+  /// los errores usan además un rojo oscuro.
+  void _showSnackBar(String message, {bool isError = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            message,
+            style: const TextStyle(color: AppColors.snackBarForeground),
+          ),
+          backgroundColor: isError
+              ? AppColors.snackBarErrorBackground
+              : AppColors.snackBarBackground,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+  }
+
   Future<void> _load() async {
     setState(() {
       _loading = true;
@@ -250,10 +270,9 @@ class _BusinessProfessionalsScreenState
     nameController.dispose();
     specialtyController.dispose();
     if (name.length < 2) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('El nombre debe tener al menos dos caracteres'),
-        ),
+      _showSnackBar(
+        'El nombre debe tener al menos dos caracteres',
+        isError: true,
       );
       return;
     }
@@ -279,31 +298,21 @@ class _BusinessProfessionalsScreenState
           : await http.post(uri, headers: headers, body: payload);
       if (!mounted) return;
       if (response.statusCode == 200 || response.statusCode == 201) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              isEdit ? 'Profesional actualizado' : 'Profesional agregado',
-            ),
-          ),
+        _showSnackBar(
+          isEdit ? 'Profesional actualizado' : 'Profesional agregado',
         );
         await _load();
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              _message(response, 'No se pudo guardar el profesional'),
-            ),
-          ),
+        _showSnackBar(
+          _message(response, 'No se pudo guardar el profesional'),
+          isError: true,
         );
       }
     } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('No se pudo conectar para guardar el profesional'),
-          ),
-        );
-      }
+      _showSnackBar(
+        'No se pudo conectar para guardar el profesional',
+        isError: true,
+      );
     }
   }
 
@@ -334,27 +343,19 @@ class _BusinessProfessionalsScreenState
       );
       if (!mounted) return;
       if (response.statusCode == 200) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Profesional eliminado')));
+        _showSnackBar('Profesional eliminado');
         await _load();
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              _message(response, 'No se pudo eliminar el profesional'),
-            ),
-          ),
+        _showSnackBar(
+          _message(response, 'No se pudo eliminar el profesional'),
+          isError: true,
         );
       }
     } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('No se pudo conectar para eliminar el profesional'),
-          ),
-        );
-      }
+      _showSnackBar(
+        'No se pudo conectar para eliminar el profesional',
+        isError: true,
+      );
     }
   }
 

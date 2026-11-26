@@ -37,25 +37,22 @@ export const createWompiLink = async (
 
     const amount = getSubscriptionPriceCop();
     const reference = createSubscriptionReference(establishment._id.toString());
-    const payment = await Payment.create({
+
+    // El link se crea ANTES de registrar el pago: si Wompi rechaza la solicitud
+    // (por ejemplo un 401 por credenciales) no queda un registro `pending`
+    // huérfano en el historial de pagos.
+    const paymentLink = await createWompiPaymentLink({
+      amountCop: amount,
+      establishmentName: establishment.name,
+    });
+    await Payment.create({
       establishment: establishment._id,
       amount,
       method: 'wompi',
       status: 'pending',
       reference,
+      wompiPaymentLinkId: paymentLink.id,
     });
-    const paymentLink = await createWompiPaymentLink({
-      amountCop: amount,
-      establishmentName: establishment.name,
-    });
-    const updatedPayment = await Payment.findByIdAndUpdate(
-      payment._id,
-      { $set: { wompiPaymentLinkId: paymentLink.id } },
-      { returnDocument: 'after', runValidators: true },
-    );
-    if (!updatedPayment) {
-      throw new Error('No se pudo asociar el link de Wompi con el pago');
-    }
 
     res.status(201).json({
       checkoutUrl: `https://checkout.wompi.co/l/${encodeURIComponent(paymentLink.id)}`,

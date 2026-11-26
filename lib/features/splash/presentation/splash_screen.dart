@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -13,23 +15,19 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
+  Timer? _redirectTimer;
+
   @override
   void initState() {
     super.initState();
-    _redirect();
-  }
-
-  Future<void> _redirect() async {
-    await Future.delayed(const Duration(seconds: 1));
-    if (!mounted) return;
-    _check();
+    _redirectTimer = Timer(const Duration(seconds: 1), _check);
   }
 
   void _check() {
     if (!mounted) return;
     final auth = context.read<AuthProvider>();
     if (auth.status == AuthStatus.unknown) {
-      Future.delayed(const Duration(milliseconds: 300), _check);
+      _redirectTimer = Timer(const Duration(milliseconds: 300), _check);
       return;
     }
     if (auth.isAuthenticated) {
@@ -41,6 +39,12 @@ class _SplashScreenState extends State<SplashScreen> {
     } else {
       context.go('/login');
     }
+  }
+
+  @override
+  void dispose() {
+    _redirectTimer?.cancel();
+    super.dispose();
   }
 
   @override

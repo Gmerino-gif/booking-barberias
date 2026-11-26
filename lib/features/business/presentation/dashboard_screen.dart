@@ -56,6 +56,29 @@ List<String> _readTags(dynamic value) {
       .toList();
 }
 
+/// SnackBar con fondo oscuro y texto blanco para garantizar contraste;
+/// los errores usan además un rojo oscuro.
+void _showAppSnackBar(
+  BuildContext context,
+  String message, {
+  bool isError = false,
+}) {
+  ScaffoldMessenger.of(context)
+    ..hideCurrentSnackBar()
+    ..showSnackBar(
+      SnackBar(
+        content: Text(
+          message,
+          style: const TextStyle(color: AppColors.snackBarForeground),
+        ),
+        backgroundColor: isError
+            ? AppColors.snackBarErrorBackground
+            : AppColors.snackBarBackground,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+}
+
 /// Reseña que el cliente dejó al servicio; `null` mientras no lo califique.
 _BookingReview? _mapBookingReview(dynamic raw) {
   if (raw is! Map<String, dynamic>) return null;
@@ -155,6 +178,86 @@ class _ServiceSummary {
     required this.durationMin,
   });
 }
+
+class _ServicePreset {
+  const _ServicePreset({
+    required this.name,
+    required this.description,
+    required this.durationMin,
+  });
+
+  final String name;
+  final String description;
+  final int durationMin;
+}
+
+const _barberServicePresets = <_ServicePreset>[
+  _ServicePreset(
+    name: 'Corte clásico / Degradado',
+    description: 'Corte personalizado (fade, taper o clásico) con acabado en contornos y limpieza final.',
+    durationMin: 30,
+  ),
+  _ServicePreset(
+    name: 'Corte + Barba',
+    description:
+        'Corte de cabello más perfilado, rebaje y acabado de barba con navaja.',
+    durationMin: 45,
+  ),
+  _ServicePreset(
+    name: 'Corte + Barba + Cejas',
+    description: 'Servicio completo de corte de cabello, arreglo de barba y perfilado de cejas.',
+    durationMin: 50,
+  ),
+  _ServicePreset(
+    name: 'Arreglo de barba',
+    description: 'Perfilado, rebaje y delineado de barba y bigote con navaja e hidratación.',
+    durationMin: 20,
+  ),
+  _ServicePreset(
+    name: 'Ritual de barba',
+    description: 'Arreglo de barba con toalla caliente, espuma/vapor, masaje e hidratación profunda.',
+    durationMin: 30,
+  ),
+  _ServicePreset(
+    name: 'Corte + Cejas',
+    description:
+        'Corte de cabello a elección acompañado de diseño y limpieza de cejas.',
+    durationMin: 35,
+  ),
+  _ServicePreset(
+    name: 'Diseño y perfilado de cejas',
+    description:
+        'Limpieza, marcación y perfilado de cejas con navaja o trimmer.',
+    durationMin: 10,
+  ),
+  _ServicePreset(
+    name: 'Corte a tijera / Texturizado',
+    description: 'Corte trabajado con tijera para aportar textura, volumen y movimiento natural.',
+    durationMin: 35,
+  ),
+  _ServicePreset(
+    name: 'Corte infantil',
+    description:
+        'Corte de cabello para niños con estilo adaptado y trato paciente.',
+    durationMin: 30,
+  ),
+  _ServicePreset(
+    name: 'Limpieza facial',
+    description:
+        'Limpieza de cutis con exfoliación, mascarilla y acabado refrescante.',
+    durationMin: 30,
+  ),
+  _ServicePreset(
+    name: 'Tintura / Coloración',
+    description: 'Aplicación de color, iluminación o cobertura de canas según estilo solicitado.',
+    durationMin: 60,
+  ),
+  _ServicePreset(
+    name: 'Alisado / Ondulado',
+    description: 'Tratamiento de alisado capilar o definición de ondas según el tipo de cabello.',
+    durationMin: 60,
+  ),
+];
 
 class BusinessDashboardScreen extends StatefulWidget {
   const BusinessDashboardScreen({super.key});
@@ -482,26 +585,9 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
           style: Theme.of(context).textTheme.headlineSmall,
         ),
         const SizedBox(height: AppSpacing.xs),
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                'Resumen del negocio',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-            ),
-            // Promedio de estrellas que los clientes le dieron al negocio.
-            if (_rating > 0)
-              Chip(
-                avatar: Icon(
-                  Icons.star,
-                  size: 16,
-                  color: Theme.of(context).colorScheme.secondary,
-                ),
-                label: Text(_rating.toStringAsFixed(1)),
-                visualDensity: VisualDensity.compact,
-              ),
-          ],
+        Text(
+          'Resumen del negocio',
+          style: Theme.of(context).textTheme.bodyMedium,
         ),
         const SizedBox(height: AppSpacing.md),
         Row(
@@ -567,57 +653,91 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
             final statusInfo = _getStatusInfo(booking.status);
             return Card(
               margin: const EdgeInsets.only(bottom: 8),
-              child: ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: statusInfo.color.withValues(alpha: 0.15),
-                  child: Icon(Icons.person_outline, color: statusInfo.color),
-                ),
-                title: Text(booking.clientName),
-                isThreeLine: true,
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.md),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Text(
-                      '${booking.serviceName} · ${booking.professionalName}',
+                    CircleAvatar(
+                      backgroundColor: statusInfo.color.withValues(alpha: 0.15),
+                      child: Icon(
+                        Icons.person_outline,
+                        color: statusInfo.color,
+                      ),
                     ),
-                    const SizedBox(height: AppSpacing.xs),
-                    Text(
-                      '${_formatDate(booking.startAt)} '
-                      '${_formatTime(booking.startAt)}',
-                    ),
-                    if (booking.clientPhone != null) ...[
-                      const SizedBox(height: AppSpacing.xs),
-                      Row(
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(
-                            Icons.phone,
-                            size: 13,
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurfaceVariant,
+                          Text(booking.clientName),
+                          const SizedBox(height: AppSpacing.xs),
+                          Text(
+                            '${booking.serviceName} · ${booking.professionalName}',
                           ),
-                          const SizedBox(width: AppSpacing.xs),
-                          Expanded(
-                            child: Text(
-                              booking.clientPhone!,
-                              style: Theme.of(context).textTheme.bodySmall,
+                          const SizedBox(height: AppSpacing.xs),
+                          Text(
+                            '${_formatDate(booking.startAt)} '
+                            '${_formatTime(booking.startAt)}',
+                          ),
+                          if (booking.clientPhone != null) ...[
+                            const SizedBox(height: AppSpacing.xs),
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.phone,
+                                  size: 13,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
+                                ),
+                                const SizedBox(width: AppSpacing.xs),
+                                Expanded(
+                                  child: Text(
+                                    booking.clientPhone!,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall,
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
+                          ],
                         ],
                       ),
-                    ],
-                  ],
-                ),
-                trailing: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(_formatCurrency(booking.price)),
-                    const SizedBox(height: 6),
-                    Chip(
-                      label: Text(statusInfo.label),
-                      visualDensity: VisualDensity.compact,
-                      backgroundColor: statusInfo.color.withValues(alpha: 0.12),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          _formatCurrency(booking.price),
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: AppSpacing.sm),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AppSpacing.sm,
+                            vertical: AppSpacing.sm,
+                          ),
+                          decoration: BoxDecoration(
+                            color: statusInfo.color.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(AppRadius.sm),
+                          ),
+                          child: Text(
+                            statusInfo.label,
+                            maxLines: 1,
+                            softWrap: false,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.labelMedium
+                                ?.copyWith(color: statusInfo.color),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -625,9 +745,25 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
             );
           }),
         const SizedBox(height: AppSpacing.lg),
-        Text(
-          'Reseñas recientes',
-          style: Theme.of(context).textTheme.titleLarge,
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Reseñas recientes',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+            ),
+            if (_rating > 0)
+              Chip(
+                avatar: Icon(
+                  Icons.star,
+                  size: 16,
+                  color: Theme.of(context).colorScheme.secondary,
+                ),
+                label: Text(_rating.toStringAsFixed(1)),
+                visualDensity: VisualDensity.compact,
+              ),
+          ],
         ),
         const SizedBox(height: AppSpacing.sm),
         if (_reviews.isEmpty)
@@ -839,28 +975,23 @@ class _BusinessAgendaScreenState extends State<BusinessAgendaScreen>
       );
       if (!mounted) return;
       if (response.statusCode == 200) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Estado de la reserva actualizado')),
-        );
+        _showAppSnackBar(context, 'Estado de la reserva actualizado');
         await _loadAgenda();
       } else {
         final body = _decodeBody(response.body);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              _readMessage(body) ?? 'No se pudo actualizar la reserva',
-            ),
-          ),
+        _showAppSnackBar(
+          context,
+          _readMessage(body) ?? 'No se pudo actualizar la reserva',
+          isError: true,
         );
       }
     } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('No se pudo conectar para actualizar la reserva'),
-          ),
-        );
-      }
+      if (!mounted) return;
+      _showAppSnackBar(
+        context,
+        'No se pudo conectar para actualizar la reserva',
+        isError: true,
+      );
     }
   }
 
@@ -928,8 +1059,7 @@ class _BusinessAgendaScreenState extends State<BusinessAgendaScreen>
         if (_bookings.isEmpty) _error = message;
       });
       if (_bookings.isNotEmpty) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(message)));
+        _showAppSnackBar(context, message, isError: true);
       }
     }
   }
@@ -1483,68 +1613,134 @@ class _BusinessServicesScreenState extends State<BusinessServicesScreen> {
     final durationController = TextEditingController(
       text: service?.durationMin.toString() ?? '30',
     );
+    final priceFocusNode = FocusNode();
     final formKey = GlobalKey<FormState>();
+    int? selectedPresetIndex;
     final accepted = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(service == null ? 'Agregar servicio' : 'Editar servicio'),
-        content: Form(
-          key: formKey,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextFormField(
-                  controller: nameController,
-                  maxLength: 100,
-                  decoration: const InputDecoration(labelText: 'Nombre'),
-                  validator: (v) =>
-                      (v?.trim().length ?? 0) < 2 ? 'Ingresa un nombre' : null,
-                ),
-                TextFormField(
-                  controller: descriptionController,
-                  maxLength: 500,
-                  decoration: const InputDecoration(labelText: 'Descripción'),
-                ),
-                TextFormField(
-                  controller: priceController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Precio (COP)'),
-                  validator: (v) => (int.tryParse(v ?? '') ?? -1) < 0
-                      ? 'Ingresa un precio válido'
-                      : null,
-                ),
-                TextFormField(
-                  controller: durationController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Duración (minutos)',
+      builder: (_) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: Text(service == null ? 'Agregar servicio' : 'Editar servicio'),
+          content: Form(
+            key: formKey,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (service == null) ...[
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Servicios sugeridos',
+                        style: Theme.of(dialogContext).textTheme.labelLarge,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          for (
+                            var index = 0;
+                            index < _barberServicePresets.length;
+                            index++
+                          ) ...[
+                            if (index > 0) const SizedBox(width: AppSpacing.sm),
+                            ChoiceChip(
+                              label: Text(_barberServicePresets[index].name),
+                              selected: selectedPresetIndex == index,
+                              onSelected: (_) {
+                                final preset = _barberServicePresets[index];
+                                setDialogState(
+                                  () => selectedPresetIndex = index,
+                                );
+                                nameController.text = preset.name;
+                                descriptionController.text = preset.description;
+                                durationController.text = preset.durationMin
+                                    .toString();
+                                priceFocusNode.requestFocus();
+                              },
+                            ),
+                          ],
+                          const SizedBox(width: AppSpacing.sm),
+                          ChoiceChip(
+                            label: const Text('Personalizado'),
+                            selected: selectedPresetIndex == null,
+                            onSelected: (_) {
+                              setDialogState(() => selectedPresetIndex = null);
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                  ],
+                  TextFormField(
+                    controller: nameController,
+                    maxLength: 100,
+                    decoration: const InputDecoration(labelText: 'Nombre'),
+                    onChanged: (_) {
+                      if (selectedPresetIndex != null) {
+                        setDialogState(() => selectedPresetIndex = null);
+                      }
+                    },
+                    validator: (v) => (v?.trim().length ?? 0) < 2
+                        ? 'Ingresa un nombre'
+                        : null,
                   ),
-                  validator: (v) {
-                    final n = int.tryParse(v ?? '');
-                    return n == null || n < 5 || n > 480
-                        ? 'Usa entre 5 y 480 minutos'
-                        : null;
-                  },
-                ),
-              ],
+                  TextFormField(
+                    controller: descriptionController,
+                    maxLength: 500,
+                    decoration: const InputDecoration(labelText: 'Descripción'),
+                    onChanged: (_) {
+                      if (selectedPresetIndex != null) {
+                        setDialogState(() => selectedPresetIndex = null);
+                      }
+                    },
+                  ),
+                  TextFormField(
+                    controller: priceController,
+                    focusNode: priceFocusNode,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Precio (COP)',
+                    ),
+                    validator: (v) => (int.tryParse(v ?? '') ?? -1) < 0
+                        ? 'Ingresa un precio válido'
+                        : null,
+                  ),
+                  TextFormField(
+                    controller: durationController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Duración (minutos)',
+                    ),
+                    validator: (v) {
+                      final n = int.tryParse(v ?? '');
+                      return n == null || n < 5 || n > 480
+                          ? 'Usa entre 5 y 480 minutos'
+                          : null;
+                    },
+                  ),
+                ],
+              ),
             ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (formKey.currentState!.validate()) {
+                  Navigator.pop(dialogContext, true);
+                }
+              },
+              child: const Text('Guardar'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (formKey.currentState!.validate()) {
-                Navigator.pop(dialogContext, true);
-              }
-            },
-            child: const Text('Guardar'),
-          ),
-        ],
       ),
     );
     if (accepted != true || !mounted) {
@@ -1552,6 +1748,7 @@ class _BusinessServicesScreenState extends State<BusinessServicesScreen> {
       descriptionController.dispose();
       priceController.dispose();
       durationController.dispose();
+      priceFocusNode.dispose();
       return;
     }
 
@@ -1563,6 +1760,7 @@ class _BusinessServicesScreenState extends State<BusinessServicesScreen> {
       descriptionController.dispose();
       priceController.dispose();
       durationController.dispose();
+      priceFocusNode.dispose();
       return;
     }
     try {
@@ -1598,27 +1796,25 @@ class _BusinessServicesScreenState extends State<BusinessServicesScreen> {
         await _loadServices();
       } else {
         final body = _decodeBody(response.body);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              _readMessage(body) ?? 'No se pudo guardar el servicio',
-            ),
-          ),
+        _showAppSnackBar(
+          context,
+          _readMessage(body) ?? 'No se pudo guardar el servicio',
+          isError: true,
         );
       }
     } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('No se pudo conectar para guardar el servicio'),
-          ),
-        );
-      }
+      if (!mounted) return;
+      _showAppSnackBar(
+        context,
+        'No se pudo conectar para guardar el servicio',
+        isError: true,
+      );
     } finally {
       nameController.dispose();
       descriptionController.dispose();
       priceController.dispose();
       durationController.dispose();
+      priceFocusNode.dispose();
     }
   }
 
@@ -1655,22 +1851,19 @@ class _BusinessServicesScreenState extends State<BusinessServicesScreen> {
         await _loadServices();
       } else {
         final body = _decodeBody(response.body);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              _readMessage(body) ?? 'No se pudo eliminar el servicio',
-            ),
-          ),
+        _showAppSnackBar(
+          context,
+          _readMessage(body) ?? 'No se pudo eliminar el servicio',
+          isError: true,
         );
       }
     } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('No se pudo conectar para eliminar el servicio'),
-          ),
-        );
-      }
+      if (!mounted) return;
+      _showAppSnackBar(
+        context,
+        'No se pudo conectar para eliminar el servicio',
+        isError: true,
+      );
     }
   }
 

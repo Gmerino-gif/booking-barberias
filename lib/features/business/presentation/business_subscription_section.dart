@@ -131,7 +131,10 @@ class _BusinessSubscriptionSectionState
     final loaded = await _loadHistory();
     if (!mounted) return;
     if (!loaded) {
-      _showMessage(_loadError ?? 'No se pudo actualizar el estado.');
+      _showMessage(
+        _loadError ?? 'No se pudo actualizar el estado.',
+        isError: true,
+      );
       return;
     }
 
@@ -148,7 +151,7 @@ class _BusinessSubscriptionSectionState
   Future<void> _createWompiCheckout() async {
     final token = context.read<AuthProvider>().accessToken;
     if (token == null || token.isEmpty) {
-      _showMessage('Tu sesión expiró. Inicia sesión otra vez.');
+      _showMessage('Tu sesión expiró. Inicia sesión otra vez.', isError: true);
       return;
     }
 
@@ -191,16 +194,20 @@ class _BusinessSubscriptionSectionState
       if (!launched && mounted) {
         _showMessage(
           'No se pudo abrir Wompi automáticamente. Usa el enlace que aparece abajo.',
+          isError: true,
         );
       }
     } on TimeoutException {
-      _showMessage('La creación del pago tardó demasiado. Inténtalo de nuevo.');
+      _showMessage(
+        'La creación del pago tardó demasiado. Inténtalo de nuevo.',
+        isError: true,
+      );
     } on http.ClientException {
-      _showMessage('No fue posible conectar con el servidor.');
+      _showMessage('No fue posible conectar con el servidor.', isError: true);
     } on _ApiException catch (error) {
-      _showMessage(error.message);
+      _showMessage(error.message, isError: true);
     } catch (_) {
-      _showMessage('No se pudo abrir el pago de Wompi.');
+      _showMessage('No se pudo abrir el pago de Wompi.', isError: true);
     } finally {
       if (mounted) setState(() => _isCreatingCheckout = false);
     }
@@ -218,16 +225,22 @@ class _BusinessSubscriptionSectionState
 
       final bytes = await file.readAsBytes();
       if (bytes.isEmpty) {
-        _showMessage('No se pudo leer la imagen seleccionada.');
+        _showMessage('No se pudo leer la imagen seleccionada.', isError: true);
         return;
       }
       if (bytes.length > 5 * 1024 * 1024) {
-        _showMessage('La imagen supera el tamaño máximo de 5 MB.');
+        _showMessage(
+          'La imagen supera el tamaño máximo de 5 MB.',
+          isError: true,
+        );
         return;
       }
       final extension = _imageExtension(bytes);
       if (extension == null) {
-        _showMessage('Formato no compatible. Usa una imagen JPG, PNG o WEBP.');
+        _showMessage(
+          'Formato no compatible. Usa una imagen JPG, PNG o WEBP.',
+          isError: true,
+        );
         return;
       }
 
@@ -237,9 +250,9 @@ class _BusinessSubscriptionSectionState
         _receiptFileName = 'comprobante.$extension';
       });
     } on PlatformException {
-      _showMessage('No se pudo abrir el selector de imágenes.');
+      _showMessage('No se pudo abrir el selector de imágenes.', isError: true);
     } catch (_) {
-      _showMessage('No se pudo leer la imagen seleccionada.');
+      _showMessage('No se pudo leer la imagen seleccionada.', isError: true);
     }
   }
 
@@ -268,7 +281,7 @@ class _BusinessSubscriptionSectionState
     }
     final token = context.read<AuthProvider>().accessToken;
     if (token == null || token.isEmpty) {
-      _showMessage('Tu sesión expiró. Inicia sesión otra vez.');
+      _showMessage('Tu sesión expiró. Inicia sesión otra vez.', isError: true);
       return;
     }
 
@@ -305,13 +318,16 @@ class _BusinessSubscriptionSectionState
       _showMessage('Comprobante enviado para revisión.');
       await _loadHistory();
     } on TimeoutException {
-      _showMessage('La carga tardó demasiado. Inténtalo de nuevo.');
+      _showMessage(
+        'La carga tardó demasiado. Inténtalo de nuevo.',
+        isError: true,
+      );
     } on http.ClientException {
-      _showMessage('No fue posible conectar con el servidor.');
+      _showMessage('No fue posible conectar con el servidor.', isError: true);
     } on _ApiException catch (error) {
-      _showMessage(error.message);
+      _showMessage(error.message, isError: true);
     } catch (_) {
-      _showMessage('No se pudo enviar el comprobante.');
+      _showMessage('No se pudo enviar el comprobante.', isError: true);
     } finally {
       if (mounted) setState(() => _isUploadingReceipt = false);
     }
@@ -322,11 +338,24 @@ class _BusinessSubscriptionSectionState
     if (mounted) _showMessage('Datos de transferencia copiados.');
   }
 
-  void _showMessage(String message) {
+  /// SnackBar con fondo oscuro y texto blanco para garantizar contraste;
+  /// los errores usan además un rojo oscuro.
+  void _showMessage(String message, {bool isError = false}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            message,
+            style: const TextStyle(color: AppColors.snackBarForeground),
+          ),
+          backgroundColor: isError
+              ? AppColors.snackBarErrorBackground
+              : AppColors.snackBarBackground,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
   }
 
   dynamic _decode(String body) {
