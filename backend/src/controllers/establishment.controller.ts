@@ -24,6 +24,8 @@ const serializeEstablishment = (establishment: Record<string, any>) => {
     rating: establishment.rating ?? 0,
     openingMinutes: establishment.openingMinutes ?? 540,
     closingMinutes: establishment.closingMinutes ?? 1080,
+    rescheduleWindowHours: establishment.rescheduleWindowHours ?? 4,
+    cancellationWindowHours: establishment.cancellationWindowHours ?? 2,
     plan: establishment.plan ?? 'free',
     lat: Number.isFinite(lat) ? lat : null,
     lng: Number.isFinite(lng) ? lng : null,
@@ -31,6 +33,12 @@ const serializeEstablishment = (establishment: Record<string, any>) => {
     updatedAt: establishment.updatedAt,
   };
 };
+
+/** Tope de horas antes de la cita para reprogramar/cancelar (7 días). */
+const MAX_WINDOW_HOURS = 168;
+
+const isValidWindowHours = (value: number): boolean =>
+  Number.isInteger(value) && value >= 0 && value <= MAX_WINDOW_HOURS;
 
 const parseLocation = (body: Record<string, unknown> | null) => {
   const lat = Number(body?.lat);
@@ -236,6 +244,12 @@ export const updateMyEstablishment = async (req: AuthenticatedRequest, res: Resp
   const lng = Number.isFinite(Number(body?.lng)) ? Number(body?.lng) : Number(currentCoords[0]);
   const openingMinutes = body?.openingMinutes === undefined ? establishment.openingMinutes ?? 540 : Number(body.openingMinutes);
   const closingMinutes = body?.closingMinutes === undefined ? establishment.closingMinutes ?? 1080 : Number(body.closingMinutes);
+  const rescheduleWindowHours = body?.rescheduleWindowHours === undefined
+    ? establishment.rescheduleWindowHours ?? 4
+    : Number(body.rescheduleWindowHours);
+  const cancellationWindowHours = body?.cancellationWindowHours === undefined
+    ? establishment.cancellationWindowHours ?? 2
+    : Number(body.cancellationWindowHours);
   const logoRef = parseImageRef(body?.logo);
   const bannerRef = parseImageRef(body?.banner);
 
@@ -247,7 +261,8 @@ export const updateMyEstablishment = async (req: AuthenticatedRequest, res: Resp
 
   if (!validateEstablishmentInput(name, address, city, description, phone, lat, lng) ||
       !Number.isInteger(openingMinutes) || !Number.isInteger(closingMinutes) ||
-      openingMinutes < 0 || closingMinutes > 1440 || closingMinutes - openingMinutes < 30) {
+      openingMinutes < 0 || closingMinutes > 1440 || closingMinutes - openingMinutes < 30 ||
+      !isValidWindowHours(rescheduleWindowHours) || !isValidWindowHours(cancellationWindowHours)) {
     res.status(400).json({ message: 'Datos de establecimiento incompletos o inválidos' });
     return;
   }
@@ -265,6 +280,8 @@ export const updateMyEstablishment = async (req: AuthenticatedRequest, res: Resp
           location: { type: 'Point', coordinates: [lng, lat] },
           openingMinutes,
           closingMinutes,
+          rescheduleWindowHours,
+          cancellationWindowHours,
           ...(logoRef === undefined ? {} : { logo: logoRef }),
           ...(bannerRef === undefined ? {} : { banner: bannerRef }),
         },

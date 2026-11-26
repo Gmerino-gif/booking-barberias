@@ -22,7 +22,8 @@ class BusinessProfileScreen extends StatefulWidget {
   State<BusinessProfileScreen> createState() => _BusinessProfileScreenState();
 }
 
-class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
+class _BusinessProfileScreenState extends State<BusinessProfileScreen>
+    with SingleTickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
@@ -43,6 +44,10 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
   bool _locationSearchHasError = false;
   int _openingMinutes = 9 * 60;
   int _closingMinutes = 18 * 60;
+  int _rescheduleWindowHours = _defaultRescheduleWindowHours;
+  int _cancellationWindowHours = _defaultCancellationWindowHours;
+  late final TabController _tabController;
+  int _tabIndex = _subscriptionTabIndex;
   String? _locationSearchMessage;
   LatLng? _selectedLocation;
   int _searchRequestSequence = 0;
@@ -54,14 +59,53 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
   static const _nominatimUserAgent =
       'booking_app/1.0 (OpenStreetMap Nominatim location search)';
 
+  // Pestañas internas de "Mi negocio".
+  static const int _subscriptionTabIndex = 0;
+  static const int _businessTabIndex = 1;
+
+  /// Antelación (en horas antes de la cita) ofrecida en la pestaña de
+  /// configuración; `0` significa "sin límite".
+  static const List<int> _windowHourOptions = [
+    0,
+    1,
+    2,
+    3,
+    4,
+    6,
+    8,
+    12,
+    24,
+    48,
+    72,
+  ];
+  static const int _defaultRescheduleWindowHours = 4;
+  static const int _defaultCancellationWindowHours = 2;
+
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 3, vsync: this)
+      ..addListener(_handleTabChange);
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadEstablishment());
+  }
+
+  void _handleTabChange() {
+    if (!mounted || _tabController.index == _tabIndex) return;
+    setState(() => _tabIndex = _tabController.index);
+  }
+
+  /// Cambia de pestaña sin animación cuando la acción la provoca el usuario
+  /// (por ejemplo, al guardar desde "Configuración" con datos incompletos).
+  void _selectTab(int index) {
+    if (_tabController.index == index) return;
+    _tabController.animateTo(index);
   }
 
   @override
   void dispose() {
+    _tabController
+      ..removeListener(_handleTabChange)
+      ..dispose();
     _nameCtrl.dispose();
     _phoneCtrl.dispose();
     _addressCtrl.dispose();
@@ -164,6 +208,12 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
           (establishment['openingMinutes'] as num?)?.toInt() ?? 9 * 60;
       _closingMinutes =
           (establishment['closingMinutes'] as num?)?.toInt() ?? 18 * 60;
+      _rescheduleWindowHours =
+          (establishment['rescheduleWindowHours'] as num?)?.toInt() ??
+          _defaultRescheduleWindowHours;
+      _cancellationWindowHours =
+          (establishment['cancellationWindowHours'] as num?)?.toInt() ??
+          _defaultCancellationWindowHours;
       _selectedLocation = initialPoint ?? _defaultMapCenter;
       _locationConfirmed = initialPoint != null;
       _locationFieldKey.currentState?.didChange(_selectedLocation);
@@ -193,7 +243,16 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
   }
 
   Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
+    // El formulario de datos vive en la pestaña "Negocio": si falta algo
+    // llevamos al usuario allí para que vea los campos marcados.
+    if (!(_formKey.currentState?.validate() ?? false)) {
+      _selectTab(_businessTabIndex);
+      _showSnackBar(
+        'Revisa los datos del negocio marcados en rojo.',
+        isError: true,
+      );
+      return;
+    }
 
     final token = context.read<AuthProvider>().accessToken;
     if (token == null || token.isEmpty) {
@@ -229,6 +288,8 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
               'phone': _phoneCtrl.text.trim(),
               'openingMinutes': _openingMinutes,
               'closingMinutes': _closingMinutes,
+              'rescheduleWindowHours': _rescheduleWindowHours,
+              'cancellationWindowHours': _cancellationWindowHours,
               'banner': _bannerRef ?? '',
               'logo': _logoRef ?? '',
             }),
@@ -487,28 +548,86 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     // `BusinessShell` already provides the AppBar for this tab-root route, so
     // this screen renders only its body (no nested Scaffold / duplicate header).
+    if (_isLoading) {
+      return const SafeArea(child: Center(child: CircularProgressIndicator()));
+    }
+
     return SafeArea(
-      child: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(AppSpacing.md),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
+      child: Column(
+        children: [
+          _buildTabBar(context),
+          Expanded(
+            // `IndexedStack` (en lugar de `TabBarView`) mantiene vivo el mapa
+            // entre pestañas y evita que el gesto horizontal del paginador
+            // compita con el arrastre del pin.
+            child: IndexedStack(
+              index: _tabIndex,
+              children: [
+                _buildSubscriptionTab(context),
+                _buildBusinessTab(context),
+                _buildSettingsTab(context),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTabBar(BuildContext context) {
+    final theme = Theme.of(context);
+    final Color selected = theme.colorScheme.primary;
+
+    return Material(
+      color: theme.appBarTheme.backgroundColor ?? theme.colorScheme.surface,
+      child: TabBar(
+        controller: _tabController,
+        labelColor: selected,
+        unselectedLabelColor: theme.colorScheme.onSurfaceVariant,
+        indicatorColor: selected,
+        indicatorSize: TabBarIndicatorSize.tab,
+        dividerColor: theme.dividerTheme.color ?? Colors.transparent,
+        labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+        labelStyle: theme.textTheme.labelMedium?.copyWith(
+          fontWeight: FontWeight.w700,
+        ),
+        unselectedLabelStyle: theme.textTheme.labelMedium,
+        tabs: const [
+          Tab(text: 'Suscripción', height: 44),
+          Tab(text: 'Negocio', height: 44),
+          Tab(text: 'Configuración', height: 44),
+        ],
+      ),
+    );
+  }
+
+  /// Suscripción y pagos (Wompi, comprobantes e historial).
+  Widget _buildSubscriptionTab(BuildContext context) {
+    return const SingleChildScrollView(
+      padding: EdgeInsets.all(AppSpacing.md),
+      child: BusinessSubscriptionSection(),
+    );
+  }
+
+  /// Datos del establecimiento, imágenes, horario y ubicación.
+  Widget _buildBusinessTab(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      child: Form(
+        key: _formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
                       Text(
                         'Información del negocio',
                         style: theme.textTheme.headlineSmall?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const SizedBox(height: 20),
-                      const BusinessSubscriptionSection(),
                       const SizedBox(height: 20),
                       TextFormField(
                         controller: _nameCtrl,
@@ -854,25 +973,109 @@ class _BusinessProfileScreenState extends State<BusinessProfileScreen> {
                           _isSaving ? 'Guardando...' : 'Guardar cambios',
                         ),
                       ),
-                      const SizedBox(height: 24),
-                      OutlinedButton.icon(
-                        onPressed: _isSaving ? null : _logout,
-                        icon: const Icon(Icons.logout),
-                        label: const Text('Cerrar sesión'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: theme.colorScheme.error,
-                          side: BorderSide(
-                            color: theme.colorScheme.error.withValues(
-                              alpha: 0.45,
-                            ),
-                          ),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Reglas de la agenda (tiempos de reprogramación y cancelación) más las
+  /// acciones de cuenta.
+  Widget _buildSettingsTab(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Reglas de la agenda',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Define con cuánta antelación puede un cliente reprogramar o cancelar su cita. Se guarda junto con los datos del negocio.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 16),
+          _buildWindowSelector(
+            label: 'Reprogramar hasta (horas antes)',
+            icon: Icons.event_repeat_outlined,
+            value: _rescheduleWindowHours,
+            onChanged: (value) =>
+                setState(() => _rescheduleWindowHours = value),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          _buildWindowSelector(
+            label: 'Cancelar hasta (horas antes)',
+            icon: Icons.event_busy_outlined,
+            value: _cancellationWindowHours,
+            onChanged: (value) =>
+                setState(() => _cancellationWindowHours = value),
+          ),
+          const SizedBox(height: 24),
+          FilledButton.icon(
+            onPressed: _isSaving ? null : _save,
+            icon: _isSaving
+                ? SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: theme.colorScheme.onPrimary,
+                    ),
+                  )
+                : const Icon(Icons.save_outlined),
+            label: Text(_isSaving ? 'Guardando...' : 'Guardar configuración'),
+          ),
+          const SizedBox(height: 24),
+          OutlinedButton.icon(
+            onPressed: _isSaving ? null : _logout,
+            icon: const Icon(Icons.logout),
+            label: const Text('Cerrar sesión'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: theme.colorScheme.error,
+              side: BorderSide(
+                color: theme.colorScheme.error.withValues(alpha: 0.45),
               ),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Selector compacto de horas de antelación (`0` = sin límite).
+  Widget _buildWindowSelector({
+    required String label,
+    required IconData icon,
+    required int value,
+    required ValueChanged<int> onChanged,
+  }) {
+    return DropdownButtonFormField<int>(
+      initialValue: value,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon),
+      ),
+      items: [
+        for (final hours in _windowHourOptions)
+          DropdownMenuItem<int>(
+            value: hours,
+            child: Text(
+              hours == 0 ? 'Sin límite (hasta la hora)' : '$hours h antes',
+            ),
+          ),
+      ],
+      onChanged: (next) {
+        if (next != null) onChanged(next);
+      },
     );
   }
 }

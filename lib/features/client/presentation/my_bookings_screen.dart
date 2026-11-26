@@ -8,12 +8,14 @@ import '../../../core/network/api_config.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../auth/providers/auth_provider.dart';
+import 'widgets/booking_slot_picker.dart';
 import 'widgets/service_review_card.dart';
 
 class BookingModel {
   final String id;
   final String establishmentId;
   final String professionalId;
+  final String serviceId;
   final String establishmentName;
   final String serviceName;
   final String professionalName;
@@ -23,10 +25,17 @@ class BookingModel {
   final String status;
   final String notes;
 
+  /// Horas de antelación mínima del negocio para cancelar (0 = sin límite).
+  final int cancellationWindowHours;
+
+  /// Horas de antelación mínima del negocio para reprogramar (0 = sin límite).
+  final int rescheduleWindowHours;
+
   const BookingModel({
     required this.id,
     this.establishmentId = '',
     this.professionalId = '',
+    this.serviceId = '',
     required this.establishmentName,
     required this.serviceName,
     required this.professionalName,
@@ -35,6 +44,8 @@ class BookingModel {
     required this.price,
     required this.status,
     this.notes = '',
+    this.cancellationWindowHours = 0,
+    this.rescheduleWindowHours = 0,
   });
 
   /// Una cita completada puede calificarse desde el historial.
@@ -42,6 +53,28 @@ class BookingModel {
       status == 'completed' &&
       id.isNotEmpty &&
       establishmentId.isNotEmpty;
+
+  /// Hora límite para cancelar; `null` cuando el negocio no pone límite.
+  DateTime? get cancellationDeadline => cancellationWindowHours > 0
+      ? startAt.subtract(Duration(hours: cancellationWindowHours))
+      : null;
+
+  /// La cancelación sigue abierta mientras no se pase el límite del negocio.
+  bool get canCancelByWindow {
+    final deadline = cancellationDeadline;
+    return deadline == null || DateTime.now().isBefore(deadline);
+  }
+
+  /// Hora límite para reprogramar; `null` cuando el negocio no pone límite.
+  DateTime? get rescheduleDeadline => rescheduleWindowHours > 0
+      ? startAt.subtract(Duration(hours: rescheduleWindowHours))
+      : null;
+
+  /// La reprogramación sigue abierta mientras no se pase el límite.
+  bool get canRescheduleByWindow {
+    final deadline = rescheduleDeadline;
+    return deadline == null || DateTime.now().isBefore(deadline);
+  }
 }
 
 class MyBookingsScreen extends StatefulWidget {
@@ -57,6 +90,9 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
   bool _isLoading = true;
   String? _error;
   List<BookingModel> _bookings = const [];
+
+  /// Cita cuya reprogramación está en curso (evita enviarla dos veces).
+  String? _reschedulingBookingId;
 
   /// Reseñas ya publicadas, indexadas por el id de la cita calificada.
   Map<String, SubmittedReview> _reviewsByBooking = const {};
@@ -130,6 +166,15 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
   }
 
   Future<void> _cancelBooking(BookingModel booking) async {
+    // El negocio puede cerrar la cancelación con antelación: si ya se pasó el
+    // límite solo se informa el motivo, sin llamar al backend.
+    if (!booking.canCancelByWindow) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_cancellationClosedReason(booking))),
+      );
+      return;
+    }
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -174,6 +219,9 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
             : 'No se pudo cancelar la reserva';
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(message)));
+        // El backend puede rechazar por el límite de tiempo: se refresca para
+        // que la tarjeta muestre el motivo actualizado.
+        await _loadBookings();
       }
     } catch (_) {
       if (mounted) {
@@ -183,6 +231,95 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
           ),
         );
       }
+    }
+  }
+
+  /// Mueve la cita a un nuevo día/hora elegido por el cliente usando el mismo
+  /// endpoint de reprogramación del backend (`PATCH /bookings/:id/reschedule`).
+  Future<void> _rescheduleBooking(BookingModel booking) async {
+    // Igual que al cancelar: si el negocio ya cerró la ventana solo se informa
+    // el motivo, sin abrir el selector ni llamar al backend.
+    if (!booking.canRescheduleByWindow) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_rescheduleClosedReason(booking))),
+      );
+      return;
+    }
+    if (booking.establishmentId.isEmpty ||
+        booking.professionalId.isEmpty ||
+        booking.serviceId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No se pudo cargar la cita para reprogramarla'),
+        ),
+      );
+      return;
+    }
+
+    final newStartAt = await showBookingSlotPicker(
+      context,
+      establishmentId: booking.establishmentId,
+      professionalId: booking.professionalId,
+      serviceId: booking.serviceId,
+      currentScheduleLabel:
+          '${_formatDate(booking.startAt)} · ${_formatTime(booking.startAt)}',
+    );
+    if (newStartAt == null || !mounted) return;
+
+    final token = context.read<AuthProvider>().accessToken;
+    if (token == null || token.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Inicia sesión para reprogramar')),
+      );
+      return;
+    }
+
+    setState(() => _reschedulingBookingId = booking.id);
+    try {
+      final response = await http
+          .patch(
+            Uri.parse(
+              '${ApiConfig.baseUrl}/bookings/${booking.id}/reschedule',
+            ),
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({
+              'startAt': newStartAt.toUtc().toIso8601String(),
+              'utcOffsetMinutes': newStartAt.timeZoneOffset.inMinutes,
+            }),
+          )
+          .timeout(const Duration(seconds: 15));
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Reserva reprogramada')),
+        );
+        await _loadBookings();
+      } else {
+        final body = jsonDecode(response.body);
+        final message = body is Map<String, dynamic> && body['message'] is String
+            ? body['message'] as String
+            : 'No se pudo reprogramar la reserva';
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
+        // El backend rechaza con 409 si venció la ventana o el horario se
+        // ocupó: se refresca para reflejar el estado real en la tarjeta.
+        await _loadBookings();
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No se pudo conectar para reprogramar la reserva'),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _reschedulingBookingId = null);
     }
   }
 
@@ -297,6 +434,7 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
           _readId(establishment) ?? _readId(map['establishmentId']) ?? '',
       professionalId:
           _readId(professional) ?? _readId(map['professionalId']) ?? '',
+      serviceId: _readId(service) ?? _readId(map['serviceId']) ?? '',
       establishmentName:
           (establishment is Map<String, dynamic>
                   ? (establishment['name'] ??
@@ -321,6 +459,8 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
       price: price,
       status: (map['status'] ?? 'pending').toString(),
       notes: (map['notes'] ?? '').toString(),
+      cancellationWindowHours: _readInt(map['cancellationWindowHours']) ?? 0,
+      rescheduleWindowHours: _readInt(map['rescheduleWindowHours']) ?? 0,
     );
   }
 
@@ -366,6 +506,19 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
   String _formatTime(DateTime date) => AppFormatters.time(date);
 
   String _formatPrice(int value) => AppFormatters.currency(value);
+
+  /// "4 horas" / "1 hora" para los avisos del límite de tiempo del negocio.
+  String _formatWindow(int hours) => hours == 1 ? '1 hora' : '$hours horas';
+
+  /// Motivo visible cuando el negocio ya cerró la cancelación por tiempo.
+  String _cancellationClosedReason(BookingModel booking) =>
+      'Ya no puedes cancelar: el negocio permite cancelar hasta '
+      '${_formatWindow(booking.cancellationWindowHours)} antes de la cita.';
+
+  /// Motivo visible cuando el negocio ya cerró la reprogramación por tiempo.
+  String _rescheduleClosedReason(BookingModel booking) =>
+      'Ya no puedes reprogramar: el negocio permite reprogramar hasta '
+      '${_formatWindow(booking.rescheduleWindowHours)} antes de la cita.';
 
   ({Color color, String label, IconData icon}) _getStatusInfo(String status) {
     const icons = <String, IconData>{
@@ -594,7 +747,7 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
                 ],
                 const Divider(height: 24),
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Text(
                       _formatPrice(booking.price),
@@ -602,23 +755,54 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
                         color: theme.colorScheme.primary,
                       ),
                     ),
-                    if (isUpcoming)
-                      OutlinedButton(
-                        onPressed: () => _cancelBooking(booking),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 0,
-                          ),
-                          minimumSize: const Size(0, 32),
-                        ),
-                        child: Text(
-                          'Cancelar',
-                          style: theme.textTheme.labelMedium,
+                    if (isUpcoming) ...[
+                      const SizedBox(width: 12),
+                      // Wrap: en pantallas angostas los dos botones bajan a una
+                      // segunda línea en vez de encimarse o desbordar.
+                      Expanded(
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          alignment: WrapAlignment.end,
+                          children: [
+                            _buildCardAction(
+                              theme,
+                              label: 'Reprogramar',
+                              onPressed:
+                                  booking.canRescheduleByWindow &&
+                                      _reschedulingBookingId == null
+                                  ? () => _rescheduleBooking(booking)
+                                  : null,
+                            ),
+                            _buildCardAction(
+                              theme,
+                              label: 'Cancelar',
+                              onPressed: booking.canCancelByWindow
+                                  ? () => _cancelBooking(booking)
+                                  : null,
+                            ),
+                          ],
                         ),
                       ),
+                    ],
                   ],
                 ),
+                if (isUpcoming && !booking.canCancelByWindow) ...[
+                  const SizedBox(height: 8),
+                  _buildInfoRow(
+                    theme,
+                    Icons.lock_clock,
+                    _cancellationClosedReason(booking),
+                  ),
+                ],
+                if (isUpcoming && !booking.canRescheduleByWindow) ...[
+                  const SizedBox(height: 8),
+                  _buildInfoRow(
+                    theme,
+                    Icons.event_repeat,
+                    _rescheduleClosedReason(booking),
+                  ),
+                ],
                 if (booking.canReview) ...[
                   const SizedBox(height: 12),
                   ServiceReviewCard(
@@ -634,6 +818,23 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
           ),
         ],
       ),
+    );
+  }
+
+  /// Botón compacto de acción de la tarjeta ("Reprogramar" / "Cancelar"),
+  /// con el mismo tamaño para que ambos queden alineados en la fila.
+  Widget _buildCardAction(
+    ThemeData theme, {
+    required String label,
+    required VoidCallback? onPressed,
+  }) {
+    return OutlinedButton(
+      onPressed: onPressed,
+      style: OutlinedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+        minimumSize: const Size(0, 32),
+      ),
+      child: Text(label, style: theme.textTheme.labelMedium),
     );
   }
 

@@ -22,6 +22,10 @@ const establishmentSchema = new Schema(
     rating: { type: Number, default: 0, min: 0, max: 5 },
     openingMinutes: { type: Number, default: 540, min: 0, max: 1439 },
     closingMinutes: { type: Number, default: 1080, min: 1, max: 1440 },
+    /** Horas de antelación mínima para reprogramar una cita (0 = sin límite). */
+    rescheduleWindowHours: { type: Number, default: 4, min: 0, max: 168 },
+    /** Horas de antelación mínima para cancelar una cita (0 = sin límite). */
+    cancellationWindowHours: { type: Number, default: 2, min: 0, max: 168 },
     plan: { type: String, enum: ['free', 'pro', 'business'], default: 'free' },
     location: {
       type: { type: String, enum: ['Point'], default: 'Point' },

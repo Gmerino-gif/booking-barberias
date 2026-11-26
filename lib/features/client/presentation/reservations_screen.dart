@@ -398,6 +398,13 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
         );
       }
 
+      // El nombre de la barbería se suma a la misma línea solo si es corto.
+      final shortEstablishmentName = _shortEstablishmentName();
+      final scheduleLabel =
+          '${AppFormatters.date(startAt, includeYear: false)} · '
+          '${AppFormatters.hourLabel(startAt)}'
+          '${shortEstablishmentName != null ? ' · $shortEstablishmentName' : ''}';
+
       final shouldViewBookings = await showDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
@@ -408,8 +415,19 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
               Text('¡Reserva creada!'),
             ],
           ),
-          content: Text(
-            'Tu cita para ${widget.serviceName} quedó agendada con ${professional.name}.',
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Tu cita para ${widget.serviceName} quedó agendada con ${professional.name}.',
+              ),
+              const SizedBox(height: AppSpacing.md),
+              _ConfirmationDetailRow(
+                icon: Icons.event_available,
+                text: scheduleLabel,
+              ),
+            ],
           ),
           actions: [
             TextButton(
@@ -478,6 +496,20 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
   String _formatFullDate(DateTime date) => AppFormatters.date(date);
 
   String _formatPrice(int value) => AppFormatters.currency(value);
+
+  /// Largo máximo del nombre de la barbería en la tarjeta de confirmación.
+  static const int _maxEstablishmentNameLength = 24;
+
+  /// Nombre de la barbería listo para una línea corta/discreta, o `null` si es
+  /// tan largo que recargaría (o agrandaría) la tarjeta de confirmación.
+  String? _shortEstablishmentName() {
+    final name = widget.establishmentName.trim().replaceAll(
+      RegExp(r'\s+'),
+      ' ',
+    );
+    if (name.isEmpty || name.length > _maxEstablishmentNameLength) return null;
+    return name;
+  }
 
   /// Cabecera común de la pantalla (volver + cambiar servicio).
   AppBar _buildAppBar({bool allowChangeService = true}) {
@@ -940,6 +972,33 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
         const SizedBox(width: AppSpacing.sm),
         Expanded(
           child: Text(text, style: theme.textTheme.bodyMedium),
+        ),
+      ],
+    );
+  }
+}
+
+/// Fila compacta (icono + texto) del diálogo "¡Reserva creada!".
+class _ConfirmationDetailRow extends StatelessWidget {
+  final IconData icon;
+  final String text;
+
+  const _ConfirmationDetailRow({required this.icon, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: theme.colorScheme.onSurfaceVariant),
+        const SizedBox(width: AppSpacing.sm),
+        Expanded(
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodyMedium,
+          ),
         ),
       ],
     );

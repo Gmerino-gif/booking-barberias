@@ -8,6 +8,11 @@ import { Professional } from '../models/Professional.js';
 import { Review } from '../models/Review.js';
 import { getAvailableSlots } from '../services/availability.service.js';
 import { notifyOwnerAboutNewBooking } from '../services/booking-notification.service.js';
+import {
+  describeClosedWindow,
+  isBookingWindowOpen,
+  readBookingWindows,
+} from '../utils/booking-windows.js';
 import type { AuthenticatedRequest } from '../middleware/auth.middleware.js';
 
 export const createBooking = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
@@ -199,6 +204,17 @@ export const updateBookingStatus = async (req: AuthenticatedRequest, res: Respon
         res.status(403).json({ message: 'No puedes cambiar el estado de esta reserva' });
         return;
       }
+      // El negocio decide con cuánta antelación se puede cancelar (0 = sin límite).
+      const cancellationEstablishment = await Establishment.findById(booking.establishmentId)
+        .select('cancellationWindowHours');
+      const { cancellationWindowHours } = readBookingWindows(cancellationEstablishment);
+      if (!isBookingWindowOpen(booking.startAt, cancellationWindowHours)) {
+        res.status(409).json({
+          message: describeClosedWindow('cancel', cancellationWindowHours),
+          cancellationWindowHours,
+        });
+        return;
+      }
     } else if (req.user!.role === 'owner') {
       const establishment = await Establishment.findOne({ ownerId: req.user!.id });
       if (!establishment || booking.establishmentId.toString() !== establishment._id.toString()) {
@@ -237,6 +253,172 @@ export const updateBookingStatus = async (req: AuthenticatedRequest, res: Respon
   }
 };
 
+/**
+ * Mueve una cita del cliente a un nuevo horario respetando la ventana de
+ * reprogramación del establecimiento y liberando los intervalos retenidos.
+ */
+export const rescheduleBooking = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const bookingId = typeof req.params.id === 'string' ? req.params.id : '';
+  const body = req.body as Record<string, unknown> | null;
+  const startAtStr = typeof body?.startAt === 'string' ? body.startAt : '';
+
+  if (!bookingId || !startAtStr) {
+    res.status(400).json({ message: 'La reserva y la nueva fecha son requeridas' });
+    return;
+  }
+
+  const startAt = new Date(startAtStr);
+  if (isNaN(startAt.getTime()) || startAt <= new Date()) {
+    res.status(400).json({ message: 'La nueva fecha de inicio no es válida' });
+    return;
+  }
+
+  try {
+    const booking = await Booking.findById(bookingId);
+    if (!booking) {
+      res.status(404).json({ message: 'Reserva no encontrada' });
+      return;
+    }
+    if (booking.clientId.toString() !== req.user!.id) {
+      res.status(403).json({ message: 'No puedes reprogramar esta reserva' });
+      return;
+    }
+    if (!['pending', 'confirmed'].includes(booking.status) || booking.startAt <= new Date()) {
+      res.status(403).json({ message: 'No puedes reprogramar esta reserva' });
+      return;
+    }
+    if (startAt.getTime() === booking.startAt.getTime()) {
+      res.status(400).json({ message: 'La nueva hora debe ser distinta a la actual' });
+      return;
+    }
+
+    const establishment = await Establishment.findById(booking.establishmentId)
+      .select('openingMinutes rescheduleWindowHours');
+    if (!establishment) {
+      res.status(404).json({ message: 'Establecimiento no encontrado' });
+      return;
+    }
+
+    // El negocio decide con cuánta antelación se puede reprogramar (0 = sin límite).
+    const { rescheduleWindowHours } = readBookingWindows(establishment);
+    if (!isBookingWindowOpen(booking.startAt, rescheduleWindowHours)) {
+      res.status(409).json({
+        message: describeClosedWindow('reschedule', rescheduleWindowHours),
+        rescheduleWindowHours,
+      });
+      return;
+    }
+
+    const service = await Service.findOne({
+      _id: booking.serviceId,
+      establishmentId: booking.establishmentId,
+    });
+    if (!service) {
+      res.status(404).json({ message: 'Servicio no encontrado' });
+      return;
+    }
+
+    const requestedOffset = Number(body?.utcOffsetMinutes);
+    const utcOffsetMinutes = Number.isInteger(requestedOffset) && Math.abs(requestedOffset) <= 14 * 60
+      ? requestedOffset
+      : booking.timeZoneOffsetMinutes ?? 0;
+
+    const localStartAt = new Date(startAt.getTime() + utcOffsetMinutes * 60_000);
+    const date = `${localStartAt.getUTCFullYear().toString().padStart(4, '0')}-${(localStartAt.getUTCMonth() + 1).toString().padStart(2, '0')}-${localStartAt.getUTCDate().toString().padStart(2, '0')}`;
+    const establishmentId = booking.establishmentId.toString();
+    const professionalId = booking.professionalId.toString();
+    const serviceId = booking.serviceId.toString();
+
+    const availableSlots = await getAvailableSlots({
+      establishmentId,
+      professionalId,
+      serviceId,
+      date,
+      utcOffsetMinutes,
+    });
+    if (!availableSlots.includes(startAt.toISOString())) {
+      res.status(409).json({ message: 'El horario seleccionado ya no está disponible' });
+      return;
+    }
+
+    const endAt = new Date(startAt.getTime() + service.durationMin * 60 * 1000);
+    const hasConflict = await Booking.exists({
+      _id: { $ne: booking._id },
+      professionalId,
+      status: { $ne: 'cancelled' },
+      startAt: { $lt: endAt },
+      endAt: { $gt: startAt },
+    });
+    if (hasConflict) {
+      res.status(409).json({ message: 'El profesional seleccionado ya no tiene disponibilidad en ese horario' });
+      return;
+    }
+
+    // Los intervalos retenidos acompañan a la cita: se liberan los antiguos y
+    // se reclaman los del nuevo horario, igual que al crear la reserva.
+    const intervalMs = 30 * 60 * 1000;
+    const localMidnightUtc = Date.UTC(
+      localStartAt.getUTCFullYear(), localStartAt.getUTCMonth(), localStartAt.getUTCDate(),
+    ) - utcOffsetMinutes * 60_000;
+    const firstOpeningSlotAt = localMidnightUtc + (establishment.openingMinutes ?? 540) * 60_000;
+    const firstSlotAt = firstOpeningSlotAt +
+      Math.floor((startAt.getTime() - firstOpeningSlotAt) / intervalMs) * intervalMs;
+    const newSlotStarts: Date[] = [];
+    for (let slotAt = firstSlotAt; slotAt < endAt.getTime(); slotAt += intervalMs) {
+      newSlotStarts.push(new Date(slotAt));
+    }
+
+    const previousLocks = await BookingSlotLock.find({ bookingId: booking._id })
+      .select('slotStartAt')
+      .lean();
+    try {
+      await BookingSlotLock.deleteMany({ bookingId: booking._id });
+      await BookingSlotLock.insertMany(
+        newSlotStarts.map((slotStartAt) => ({
+          bookingId: booking._id,
+          professionalId: booking.professionalId,
+          slotStartAt,
+        })),
+        { ordered: true },
+      );
+    } catch (error) {
+      // Devolver la cita a su retención anterior para no dejar huecos abiertos.
+      try {
+        await BookingSlotLock.deleteMany({ bookingId: booking._id });
+        if (previousLocks.length > 0) {
+          await BookingSlotLock.insertMany(
+            previousLocks.map((lock) => ({
+              bookingId: booking._id,
+              professionalId: booking.professionalId,
+              slotStartAt: lock.slotStartAt,
+            })),
+          );
+        }
+      } catch {
+        console.error(`No se pudieron restaurar los intervalos de la reserva ${bookingId}`);
+      }
+      if (isDuplicateKeyError(error)) {
+        res.status(409).json({ message: 'El horario seleccionado ya no está disponible' });
+        return;
+      }
+      throw error;
+    }
+
+    booking.startAt = startAt;
+    booking.endAt = endAt;
+    booking.timeZoneOffsetMinutes = utcOffsetMinutes;
+    await booking.save();
+
+    res.status(200).json({
+      message: 'Reserva reprogramada',
+      booking: serializeBooking(booking),
+      rescheduleWindowHours,
+    });
+  } catch {
+    res.status(500).json({ message: 'No se pudo reprogramar la reserva' });
+  }
+};
+
 const serializeBooking = (booking: any) => ({
   id: booking._id?.toString?.() ?? booking.id,
   clientId: booking.clientId?._id?.toString?.() ?? booking.clientId ?? null,
@@ -247,6 +429,9 @@ const serializeBooking = (booking: any) => ({
   clientName: booking.clientId?.name ?? null,
   // El negocio necesita el teléfono del cliente para poder contactarlo.
   clientPhone: booking.clientId?.phone ?? null,
+  // Ventanas de antelación vigentes del negocio (0 = sin límite).
+  rescheduleWindowHours: booking.establishmentId?.rescheduleWindowHours ?? null,
+  cancellationWindowHours: booking.establishmentId?.cancellationWindowHours ?? null,
   professionalName: booking.professionalId?.name ?? null,
   serviceName: booking.serviceId?.name ?? null,
   durationMin: booking.serviceId?.durationMin ?? booking.durationMin ?? null,
@@ -261,7 +446,7 @@ const serializeBooking = (booking: any) => ({
 export const getMyBookings = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const bookings = await Booking.find({ clientId: req.user!.id })
-      .populate('establishmentId', 'name address phone')
+      .populate('establishmentId', 'name address phone rescheduleWindowHours cancellationWindowHours')
       .populate('clientId', 'name phone')
       .populate('professionalId', 'name')
       .populate('serviceId', 'name durationMin price')
@@ -292,7 +477,7 @@ export const getBusinessBookings = async (req: AuthenticatedRequest, res: Respon
     }
 
     const bookings = await Booking.find({ establishmentId: establishment._id })
-      .populate('establishmentId', 'name address phone')
+      .populate('establishmentId', 'name address phone rescheduleWindowHours cancellationWindowHours')
       .populate('clientId', 'name phone')
       .populate('professionalId', 'name')
       .populate('serviceId', 'name durationMin price')
